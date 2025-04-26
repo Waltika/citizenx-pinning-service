@@ -2,3 +2,5 @@ node_modules/
 *.log
 .idea/
 coverage/
+/node_modules/
+/orbitdb/
