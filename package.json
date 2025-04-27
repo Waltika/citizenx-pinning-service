@@ -18,14 +18,10 @@
   },
   "homepage": "https://github.com/Waltika/citizenx-pinning-service#readme",
   "dependencies": {
-    "@chainsafe/libp2p-gossipsub": "^14.1.1",
-    "@libp2p/bootstrap": "^11.0.35",
-    "@libp2p/circuit-relay-v2": "^3.2.11",
-    "@libp2p/identify": "^3.0.29",
     "@libp2p/interface": "^2.9.0",
     "@libp2p/webrtc": "^5.2.12",
-    "@libp2p/websockets": "^9.2.10",
-    "@orbitdb/core": "^2.5.0",
-    "helia": "^5.3.0"
+    "express": "^5.1.0",
+    "gun": "^0.2020.1240",
+    "js-ipfs": "^0.0.1"
   }
 }
