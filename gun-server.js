@@ -159,4 +159,9 @@ app.get('/api/annotations', async (req, res) => {
 
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
-console.log(`Initial peers: ${initialPeers.length > 0 ? initialPeers.join('
+console.log(`Initial peers: ${initialPeers.length > 0 ? initialPeers.join(', ') : 'none'}`);
+
+// Log peer connections
+gun.on('hi', (peer) => {
+    console.log('Connected to peer:', peer);
+});
