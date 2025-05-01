@@ -2,6 +2,8 @@ import Gun from 'gun';
 import http from 'http';
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 
 const port = process.env.PORT || 8765;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
@@ -14,10 +16,23 @@ app.use(cors({
 }));
 
 const server = http.createServer(app).listen(port);
+
+// Ensure the /var/data/gun-data directory exists
+const dataDir = '/var/data/gun-data';
+try {
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+        console.log('Created data directory:', dataDir);
+    }
+} catch (error) {
+    console.error('Failed to create data directory:', dataDir, error);
+    console.warn('Data persistence may not work on Render free plan without a persistent disk.');
+}
+
 const gun = Gun({
     web: server,
     peers: initialPeers,
-    file: 'gun-data',
+    file: dataDir, // Store data in /var/data/gun-data
     radisk: true,
 });
 
@@ -51,7 +66,6 @@ setInterval(() => {
     });
 }, 5 * 60 * 1000);
 
-// Normalize URL function (same as in the extension)
 function normalizeUrl(url) {
     let cleanUrl = url.replace(/^(https?:\/\/)+/, 'https://');
     cleanUrl = cleanUrl.replace(/\/+$/, '');
@@ -75,31 +89,42 @@ app.get('/api/annotations', async (req, res) => {
     }
 
     try {
-        // Normalize the URL before querying Gun.js
         const normalizedUrl = normalizeUrl(url);
         console.log('Normalized URL for query:', normalizedUrl);
 
         const annotationNode = gun.get('annotations').get(normalizedUrl);
-        const annotations = await new Promise((resolve) => {
-            const annotationList = [];
-            const loadedAnnotations = new Set();
-            annotationNode.map().once((annotation) => {
-                if (annotation && !loadedAnnotations.has(annotation.id)) {
-                    loadedAnnotations.add(annotation.id);
-                    annotationList.push({
-                        id: annotation.id,
-                        url: annotation.url,
-                        content: annotation.content,
-                        author: annotation.author,
-                        timestamp: annotation.timestamp,
-                    });
-                }
+        const maxRetries = 3;
+        let annotations = [];
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            annotations = await new Promise((resolve) => {
+                const annotationList = [];
+                const loadedAnnotations = new Set();
+                annotationNode.map().once((annotation) => {
+                    if (annotation && !loadedAnnotations.has(annotation.id)) {
+                        loadedAnnotations.add(annotation.id);
+                        annotationList.push({
+                            id: annotation.id,
+                            url: annotation.url,
+                            content: annotation.content,
+                            author: annotation.author,
+                            timestamp: annotation.timestamp,
+                        });
+                    }
+                });
+                setTimeout(() => {
+                    console.log(`Attempt ${attempt}: Annotations found:`, annotationList);
+                    resolve(annotationList);
+                }, 5000);
             });
-            setTimeout(() => {
-                console.log('Annotations found:', annotationList);
-                resolve(annotationList);
-            }, 2000);
-        });
+
+            if (annotations.length > 0 || attempt === maxRetries) {
+                break;
+            }
+
+            console.log(`Retrying annotation fetch for URL: ${normalizedUrl}, attempt ${attempt}/${maxRetries}`);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
 
         if (!annotations || annotations.length === 0) {
             return res.status(404).json({ error: 'No annotations found for this URL' });
