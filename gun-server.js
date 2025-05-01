@@ -1,6 +1,7 @@
 import Gun from 'gun';
 import http from 'http';
 import express from 'express';
+import cors from 'cors';
 
 // Default port for the Gun server (Render will set PORT automatically)
 const port = process.env.PORT || 8765;
@@ -13,6 +14,12 @@ const initialPeers = [];
 
 // Create an Express app for the API
 const app = express();
+
+// Enable CORS for requests from https://citizenx.app
+app.use(cors({
+    origin: 'https://citizenx.app',
+    methods: ['GET'],
+}));
 
 // Create an HTTP server for Gun and Express
 const server = http.createServer(app).listen(port);
@@ -152,9 +159,4 @@ app.get('/api/annotations', async (req, res) => {
 
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
-console.log(`Initial peers: ${initialPeers.length > 0 ? initialPeers.join(', ') : 'none'}`);
-
-// Log peer connections
-gun.on('hi', (peer) => {
-    console.log('Connected to peer:', peer);
-});
+console.log(`Initial peers: ${initialPeers.length > 0 ? initialPeers.join('
