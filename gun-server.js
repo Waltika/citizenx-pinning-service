@@ -51,16 +51,35 @@ setInterval(() => {
     });
 }, 5 * 60 * 1000);
 
+// Normalize URL function (same as in the extension)
+function normalizeUrl(url) {
+    let cleanUrl = url.replace(/^(https?:\/\/)+/, 'https://');
+    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    const urlObj = new URL(cleanUrl);
+    const params = new URLSearchParams(urlObj.search);
+    for (const key of params.keys()) {
+        if (key.startsWith('utm_')) {
+            params.delete(key);
+        }
+    }
+    urlObj.search = params.toString();
+    return urlObj.toString();
+}
+
 app.get('/api/annotations', async (req, res) => {
     const url = req.query.url;
-    const annotationId = req.query.annotationId; // Optional
+    const annotationId = req.query.annotationId;
 
     if (!url) {
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
     try {
-        const annotationNode = gun.get('annotations').get(url);
+        // Normalize the URL before querying Gun.js
+        const normalizedUrl = normalizeUrl(url);
+        console.log('Normalized URL for query:', normalizedUrl);
+
+        const annotationNode = gun.get('annotations').get(normalizedUrl);
         const annotations = await new Promise((resolve) => {
             const annotationList = [];
             const loadedAnnotations = new Set();
@@ -76,17 +95,18 @@ app.get('/api/annotations', async (req, res) => {
                     });
                 }
             });
-            setTimeout(() => resolve(annotationList), 2000);
+            setTimeout(() => {
+                console.log('Annotations found:', annotationList);
+                resolve(annotationList);
+            }, 2000);
         });
 
         if (!annotations || annotations.length === 0) {
             return res.status(404).json({ error: 'No annotations found for this URL' });
         }
 
-        // Fetch profiles and comments for each annotation
         const annotationsWithDetails = await Promise.all(
             annotations.map(async (annotation) => {
-                // Fetch the author's profile
                 const profile = await new Promise((resolve) => {
                     gun.get('profiles').get(annotation.author).once((data) => {
                         if (data && data.handle) {
@@ -100,7 +120,6 @@ app.get('/api/annotations', async (req, res) => {
                     });
                 });
 
-                // Fetch comments
                 const comments = await new Promise((resolve) => {
                     const commentList = [];
                     annotationNode.get(annotation.id).get('comments').map().once((comment) => {
@@ -116,7 +135,6 @@ app.get('/api/annotations', async (req, res) => {
                     setTimeout(() => resolve(commentList), 500);
                 });
 
-                // Fetch comment authors' profiles
                 const commentsWithAuthors = await Promise.all(
                     comments.map(async (comment) => {
                         const commentProfile = await new Promise((resolve) => {
