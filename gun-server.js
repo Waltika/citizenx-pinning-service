@@ -1,20 +1,14 @@
 import Gun from 'gun';
 import http from 'http';
 
-// Default port for the Gun server
+// Default port for the Gun server (Render will set PORT automatically)
 const port = process.env.PORT || 8765;
 
-// Public URL of this server (must be provided by the user, e.g., via ngrok)
-const publicUrl = process.env.PUBLIC_URL;
+// Hardcode the public URL for Render
+const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 
-// Initial list of known peers (can be empty if this is the first server)
-const initialPeers = process.env.GUN_PEERS ? process.env.GUN_PEERS.split(',') : [];
-
-// Validate public URL
-if (!publicUrl) {
-    console.error('PUBLIC_PUURL environment variable is required. Please set the public URL of this server (e.g., https://abc123.ngrok.io).');
-    process.exit(1);
-}
+// Initial list of known peers (empty since this is the first bootstrap node)
+const initialPeers = [];
 
 // Create an HTTP server for Gun
 const server = http.createServer(Gun.serve(import.meta.url)).listen(port);
@@ -43,6 +37,20 @@ setInterval(() => {
         }
     });
 }, 5 * 60 * 1000); // Update every 5 minutes
+
+// Clean up stale peers (older than 10 minutes)
+setInterval(() => {
+    gun.get('knownPeers').map().once((peer, id) => {
+        if (peer && peer.url && peer.timestamp) {
+            const now = Date.now();
+            const age = now - peer.timestamp;
+            if (age > 10 * 60 * 1000) { // 10 minutes
+                console.log('Removing stale peer:', peer.url);
+                gun.get('knownPeers').get(id).put(null);
+            }
+        }
+    });
+}, 5 * 60 * 1000); // Check every 5 minutes
 
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
