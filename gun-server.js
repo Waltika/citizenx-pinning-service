@@ -83,7 +83,7 @@ function normalizeUrl(url) {
     return urlObj.toString();
 }
 
-async function getProfileWithRetries(did, retries = 5, delay = 1000) {
+async function getProfileWithRetries(did, retries = 5, delay = 200) {
     // Check cache first
     if (profileCache.has(did)) {
         return profileCache.get(did);
@@ -164,7 +164,7 @@ app.get('/api/annotations', async (req, res) => {
                 setTimeout(() => {
                     console.log(`Attempt ${attempt}: Annotations found:`, annotationList);
                     resolve(annotationList);
-                }, 5000);
+                }, 1000); // Reduced from 5000ms to 1000ms
             });
 
             if (annotations.length > 0 || attempt === maxRetries) {
