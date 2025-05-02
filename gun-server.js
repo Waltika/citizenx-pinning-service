@@ -66,6 +66,9 @@ setInterval(() => {
     });
 }, 5 * 60 * 1000);
 
+// In-memory cache for profiles
+const profileCache = new Map();
+
 function normalizeUrl(url) {
     let cleanUrl = url.replace(/^(https?:\/\/)+/, 'https://');
     cleanUrl = cleanUrl.replace(/\/+$/, '');
@@ -78,6 +81,52 @@ function normalizeUrl(url) {
     }
     urlObj.search = params.toString();
     return urlObj.toString();
+}
+
+async function getProfileWithRetries(did, retries = 5, delay = 1000) {
+    // Check cache first
+    if (profileCache.has(did)) {
+        return profileCache.get(did);
+    }
+
+    // Retry fetching the profile from Gun.js
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        const profile = await new Promise((resolve) => {
+            gun.get('profiles').get(did).once((data) => {
+                if (data && data.handle) {
+                    resolve({
+                        handle: data.handle,
+                        profilePicture: data.profilePicture,
+                    });
+                } else {
+                    // Fallback to user-specific namespace
+                    gun.get(`user_${did}`).get('profile').once((userData) => {
+                        if (userData && userData.handle) {
+                            resolve({
+                                handle: userData.handle,
+                                profilePicture: userData.profilePicture,
+                            });
+                        } else {
+                            resolve(null);
+                        }
+                    });
+                }
+            });
+        });
+
+        if (profile) {
+            // Cache the profile for 5 minutes
+            profileCache.set(did, profile);
+            setTimeout(() => profileCache.delete(did), 5 * 60 * 1000);
+            return profile;
+        }
+
+        console.log(`Retrying profile fetch for DID: ${did}, attempt ${attempt}/${retries}`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
+    console.error('Failed to load profile for DID after retries:', did);
+    return { handle: 'Unknown' };
 }
 
 app.get('/api/annotations', async (req, res) => {
@@ -132,18 +181,7 @@ app.get('/api/annotations', async (req, res) => {
 
         const annotationsWithDetails = await Promise.all(
             annotations.map(async (annotation) => {
-                const profile = await new Promise((resolve) => {
-                    gun.get('profiles').get(annotation.author).once((data) => {
-                        if (data && data.handle) {
-                            resolve({
-                                handle: data.handle,
-                                profilePicture: data.profilePicture,
-                            });
-                        } else {
-                            resolve({ handle: 'Unknown' });
-                        }
-                    });
-                });
+                const profile = await getProfileWithRetries(annotation.author);
 
                 const comments = await new Promise((resolve) => {
                     const commentList = [];
@@ -162,15 +200,7 @@ app.get('/api/annotations', async (req, res) => {
 
                 const commentsWithAuthors = await Promise.all(
                     comments.map(async (comment) => {
-                        const commentProfile = await new Promise((resolve) => {
-                            gun.get('profiles').get(comment.author).once((data) => {
-                                if (data && data.handle) {
-                                    resolve({ handle: data.handle });
-                                } else {
-                                    resolve({ handle: 'Unknown' });
-                                }
-                            });
-                        });
+                        const commentProfile = await getProfileWithRetries(comment.author);
                         return {
                             ...comment,
                             authorHandle: commentProfile.handle,
