@@ -12,7 +12,7 @@ const initialPeers = [];
 
 const app = express();
 app.use(cors({
-    origin: ['https://citizenx.app', 'chrome-extension://*'], // Allow extension origins
+    origin: ['https://citizenx.app', '*'], // Allow extension origins
     methods: ['GET', 'POST'], // Allow GET and POST for /api/shorten-url
 }));
 
