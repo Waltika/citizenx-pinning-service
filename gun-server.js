@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
@@ -11,8 +12,8 @@ const initialPeers = [];
 
 const app = express();
 app.use(cors({
-    origin: 'https://citizenx.app',
-    methods: ['GET'],
+    origin: 'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap',
+    methods: ['GET', 'POST'],
 }));
 
 const server = http.createServer(app).listen(port);
@@ -26,7 +27,17 @@ try {
     }
 } catch (error) {
     console.error('Failed to create data directory:', dataDir, error);
-    console.warn('Data persistence may not work on Render free plan without a persistent disk.');
+    console.warn('Data persistence may not work without a persistent disk.');
+}
+
+// Read the Short.io API key from /var/data/short.key
+let shortIoApiKey = '';
+try {
+    shortIoApiKey = fs.readFileSync('/var/data/short.key', 'utf8').trim();
+    console.log('Successfully read Short.io API key from /var/data/short.key');
+} catch (error) {
+    console.error('Failed to read Short.io API key from /var/data/short.key:', error);
+    process.exit(1); // Exit if the API key cannot be read
 }
 
 const gun = Gun({
@@ -85,19 +96,32 @@ ensureServerPeer();
 setInterval(() => {
     const now = Date.now();
     console.log('Updating server peer timestamp...');
-    gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: now }, (ack) => {
-        if (ack.err) {
-            console.error('Failed to update server timestamp in knownPeers:', ack.err);
+    gun.get('knownPeers').get(peerId).once((data) => {
+        if (!data || !data.url || !data.timestamp) {
+            console.warn('Server peer entry missing or invalid, re-registering...');
+            gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: now }, (ack) => {
+                if (ack.err) {
+                    console.error('Failed to re-register server in knownPeers:', ack.err);
+                } else {
+                    console.log('Successfully re-registered server in knownPeers');
+                }
+            });
         } else {
-            console.log('Updated server timestamp in knownPeers');
+            gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: now }, (ack) => {
+                if (ack.err) {
+                    console.error('Failed to update server timestamp in knownPeers:', ack.err);
+                } else {
+                    console.log('Updated server timestamp in knownPeers');
+                }
+            });
         }
     });
 }, 5 * 60 * 1000);
 
 // Throttle peer cleanup to reduce unnecessary updates
 let lastCleanup = 0;
-const cleanupInterval = 5 * 60 * 1000;
-const cleanupThrottle = 2 * 60 * 1000;
+const cleanupInterval = 2 * 60 * 1000; // Reduced to 2 minutes
+const cleanupThrottle = 1 * 60 * 1000; // Throttle to 1 minute between cleanups
 
 setInterval(() => {
     const now = Date.now();
@@ -191,6 +215,34 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
     console.error('Failed to load profile for DID after retries:', did);
     return { handle: 'Unknown' };
 }
+
+// New endpoint for URL shortening
+app.post('/api/shorten', express.json(), async (req, res) => {
+    const { url } = req.body;
+
+    if (!url) {
+        return res.status(400).json({ error: 'Missing url parameter' });
+    }
+
+    try {
+        const response = await axios.post('https://api.short.io/links', {
+            originalURL: url,
+            domain: 'citizx.im'
+        }, {
+            headers: {
+                'Authorization': shortIoApiKey,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const shortUrl = response.data.shortURL;
+        console.log(`Successfully shortened URL: ${url} to ${shortUrl}`);
+        res.json({ shortUrl });
+    } catch (error) {
+        console.error('Error shortening URL:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Failed to shorten URL' });
+    }
+});
 
 app.get('/api/annotations', async (req, res) => {
     const url = req.query.url;
