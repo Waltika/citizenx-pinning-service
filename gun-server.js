@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import axios from 'axios'; // Added for Ulvis API calls
 
 const port = process.env.PORT || 8765;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
@@ -11,8 +12,8 @@ const initialPeers = [];
 
 const app = express();
 app.use(cors({
-    origin: 'https://citizenx.app',
-    methods: ['GET'],
+    origin: ['https://citizenx.app', 'chrome-extension://*'], // Allow extension origins
+    methods: ['GET', 'POST'], // Allow GET and POST for /api/shorten-url
 }));
 
 const server = http.createServer(app).listen(port);
@@ -221,6 +222,38 @@ app.get('/api/annotations', async (req, res) => {
     } catch (error) {
         console.error('Error fetching annotations:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// New endpoint to shorten URLs using Ulvis API
+app.get('/api/shorten-url', async (req, res) => {
+    const longUrl = req.query.url;
+
+    if (!longUrl) {
+        return res.status(400).json({ error: 'Missing url parameter' });
+    }
+
+    try {
+        // Generate a custom alias based on a hash of the URL (for uniqueness)
+        const alias = `citizenx-${Date.now()}`; // Simplified for now; can use a hash later
+        const apiUrl = `https://ulvis.net/API/write/get?url=${encodeURIComponent(longUrl)}&custom=${alias}&type=json`;
+        console.log('Calling Ulvis API:', apiUrl);
+
+        const response = await axios.get(apiUrl);
+        const data = response.data;
+
+        console.log('Ulvis API Response:', data);
+
+        if (data.success === true) {
+            const shortenedUrl = data.data.url;
+            res.json({ shortenedUrl });
+        } else {
+            console.error('Failed to shorten URL:', data);
+            res.json({ shortenedUrl: longUrl }); // Fallback to original URL
+        }
+    } catch (error) {
+        console.error('Error calling Ulvis API:', error.message);
+        res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
     }
 });
 
