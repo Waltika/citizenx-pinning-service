@@ -11,7 +11,18 @@ const initialPeers = [];
 
 const app = express();
 app.use(cors({
-    origin: 'https://citizenx.app',
+    origin: (origin, callback) => {
+        const allowedOrigins = [
+            'https://citizenx.app',
+            'chrome-extension://*',
+        ];
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.error('CORS rejected origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     methods: ['GET'],
 }));
 
