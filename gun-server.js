@@ -242,46 +242,58 @@ app.get('/api/annotations', async (req, res) => {
     }
 });
 
-// New endpoint to shorten URLs using T.LY API
+// New endpoint to shorten URLs using Shrtco.de API
 app.get('/api/shorten-url', async (req, res) => {
     const longUrl = req.query.url;
-    const tlyApiKey = 'YOUR_TLY_API_KEY'; // Replace with your T.LY API key
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second delay between retries
 
     if (!longUrl) {
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
-    try {
-        const apiUrl = `https://t.ly/api/v1/link/shorten`;
-        console.log('Calling T.LY API:', apiUrl);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const alias = `citizenx-${Date.now()}`; // Simplified for now; can use a hash later
+            const apiUrl = `https://api.shrtco.de/v2/shorten?url=${encodeURIComponent(longUrl)}&custom=${alias}`;
+            console.log(`Attempt ${attempt}: Calling Shrtco.de API:`, apiUrl);
 
-        const response = await axios.post(apiUrl, {
-            long_url: longUrl,
-        }, {
-            headers: {
-                'Authorization': `Bearer ${tlyApiKey}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'CitizenX/1.0 (https://citizenx.app; support@citizenx.app)',
-            },
-        });
+            const response = await axios.get(apiUrl, {
+                headers: {
+                    'User-Agent': 'CitizenX/1.0 (https://citizenx.app; support@citizenx.app)',
+                },
+            });
 
-        const data = response.data;
-        console.log('T.LY API Response:', data);
+            const data = response.data;
+            console.log(`Attempt ${attempt}: Shrtco.de API Response:`, data);
 
-        if (data.short_url) {
-            const shortenedUrl = data.short_url;
-            res.json({ shortenedUrl });
-        } else {
-            console.error('Failed to shorten URL:', data);
-            res.json({ shortenedUrl: longUrl }); // Fallback to original URL
+            if (data.ok && data.result && data.result.full_short_link) {
+                const shortenedUrl = data.result.full_short_link;
+                res.json({ shortenedUrl });
+                return;
+            } else {
+                console.error(`Attempt ${attempt}: Failed to shorten URL:`, data);
+                if (attempt === maxRetries) {
+                    res.json({ shortenedUrl: longUrl }); // Fallback to original URL after max retries
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error(`Attempt ${attempt}: Error calling Shrtco.de API:`, {
+                message: error.message,
+                status: error.response?.status,
+                response: error.response?.data,
+            });
+
+            if (attempt === maxRetries) {
+                console.error('Max retries reached. Falling back to original URL.');
+                res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
+                return;
+            }
+
+            console.log(`Retrying in ${retryDelay}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
         }
-    } catch (error) {
-        console.error('Error calling T.LY API:', {
-            message: error.message,
-            status: error.response?.status,
-            response: error.response?.data,
-        });
-        res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
     }
 });
 
