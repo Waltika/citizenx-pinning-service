@@ -1,4 +1,4 @@
-import Gun from 'gun';
+imp rt Gun from 'gun';
 import http from 'http';
 import express from 'express';
 import cors from 'cors';
