@@ -18,7 +18,7 @@ app.use(cors({
         // Allow requests from specific origins
         const allowedOrigins = [
             'https://citizenx.app',
-            'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Specific extension origin
+            '*', // Specific extension origin
         ];
 
         // Allow requests with no origin (e.g., server-to-server) or from allowed origins
@@ -45,6 +45,34 @@ try {
 } catch (error) {
     console.error('Failed to create data directory:', dataDir, error);
     console.warn('Data persistence may not work on Render free plan without a persistent disk.');
+}
+
+// Ensure the /var/data directory exists and create /var/data/short.key if it doesn't exist
+const shortKeyPath = '/var/data/short.key';
+try {
+    const shortKeyDir = path.dirname(shortKeyPath);
+    if (!fs.existsSync(shortKeyDir)) {
+        fs.mkdirSync(shortKeyDir, { recursive: true });
+        console.log('Created directory for Short.io API key:', shortKeyDir);
+    }
+
+    if (!fs.existsSync(shortKeyPath)) {
+        // Write the API key to the file if it doesn't exist
+        const shortIoApiKey = 'sk_kRvyN0R1rRpdoo5D'; // Initial setup; remove after first deployment
+        fs.writeFileSync(shortKeyPath, shortIoApiKey, { flag: 'wx' });
+        console.log('Created Short.io API key file:', shortKeyPath);
+    }
+} catch (error) {
+    console.error('Failed to create Short.io API key file:', shortKeyPath, error);
+}
+
+// Read the Short.io API key from /var/data/short.key
+let shortIoApiKey;
+try {
+    shortIoApiKey = fs.readFileSync(shortKeyPath, 'utf8').trim();
+    console.log('Successfully read Short.io API key from:', shortKeyPath);
+} catch (error) {
+    console.error('Failed to read Short.io API key from:', shortKeyPath, error);
 }
 
 const gun = Gun({
@@ -242,7 +270,7 @@ app.get('/api/annotations', async (req, res) => {
     }
 });
 
-// New endpoint to shorten URLs using Shrtco.de API
+// New endpoint to shorten URLs using Short.io API
 app.get('/api/shorten-url', async (req, res) => {
     const longUrl = req.query.url;
     const maxRetries = 3;
@@ -252,23 +280,33 @@ app.get('/api/shorten-url', async (req, res) => {
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
+    if (!shortIoApiKey) {
+        console.error('Short.io API key not found at /var/data/short.key');
+        res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
+        return;
+    }
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const alias = `citizenx-${Date.now()}`; // Simplified for now; can use a hash later
-            const apiUrl = `https://api.shrtco.de/v2/shorten?url=${encodeURIComponent(longUrl)}&custom=${alias}`;
-            console.log(`Attempt ${attempt}: Calling Shrtco.de API:`, apiUrl);
+            const apiUrl = `https://api.short.io/links`;
+            console.log(`Attempt ${attempt}: Calling Short.io API:`, apiUrl);
 
-            const response = await axios.get(apiUrl, {
+            const response = await axios.post(apiUrl, {
+                domain: 'citizx.im',
+                originalURL: longUrl,
+            }, {
                 headers: {
+                    'Authorization': shortIoApiKey,
+                    'Content-Type': 'application/json',
                     'User-Agent': 'CitizenX/1.0 (https://citizenx.app; support@citizenx.app)',
                 },
             });
 
             const data = response.data;
-            console.log(`Attempt ${attempt}: Shrtco.de API Response:`, data);
+            console.log(`Attempt ${attempt}: Short.io API Response:`, data);
 
-            if (data.ok && data.result && data.result.full_short_link) {
-                const shortenedUrl = data.result.full_short_link;
+            if (data.shortURL) {
+                const shortenedUrl = data.shortURL;
                 res.json({ shortenedUrl });
                 return;
             } else {
@@ -279,7 +317,7 @@ app.get('/api/shorten-url', async (req, res) => {
                 }
             }
         } catch (error) {
-            console.error(`Attempt ${attempt}: Error calling Shrtco.de API:`, {
+            console.error(`Attempt ${attempt}: Error calling Short.io API:`, {
                 message: error.message,
                 status: error.response?.status,
                 response: error.response?.data,
