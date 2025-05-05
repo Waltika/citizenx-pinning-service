@@ -11,18 +11,7 @@ const initialPeers = [];
 
 const app = express();
 app.use(cors({
-    origin: (origin, callback) => {
-        const allowedOrigins = [
-            'https://citizenx.app',
-            'chrome-extension://*',
-        ];
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            console.error('CORS rejected origin:', origin);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
+    origin: 'https://citizenx.app',
     methods: ['GET'],
 }));
 
@@ -43,31 +32,54 @@ try {
 const gun = Gun({
     web: server,
     peers: initialPeers,
-    file: dataDir, // Store data in /var/data/gun-data
+    file: dataDir,
     radisk: true,
 });
 
-const peerId = `${publicUrl}-${Date.now()}`;
-gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: Date.now() }, (ack) => {
-    if (ack.err) {
-        console.error('Failed to register server in knownPeers:', ack.err);
-    } else {
-        console.log(`Registered server in knownPeers: ${publicUrl}/gun`);
-    }
-});
+// Use a static peerId to persist across server restarts
+const peerId = `${publicUrl}-bootstrap`;
 
+// Ensure the server's entry is in knownPeers on startup
+const ensureServerPeer = () => {
+    gun.get('knownPeers').get(peerId).once((data) => {
+        if (!data || !data.url || !data.timestamp || (Date.now() - data.timestamp > 10 * 60 * 1000)) {
+            gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: Date.now() }, (ack) => {
+                if (ack.err) {
+                    console.error('Failed to register server in knownPeers:', ack.err);
+                } else {
+                    console.log(`Registered server in knownPeers: ${publicUrl}/gun`);
+                }
+            });
+        }
+    });
+};
+
+// Run on startup and periodically
+ensureServerPeer();
 setInterval(() => {
     gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: Date.now() }, (ack) => {
         if (ack.err) {
             console.error('Failed to update server timestamp in knownPeers:', ack.err);
+        } else {
+            console.log('Updated server timestamp in knownPeers');
         }
     });
 }, 5 * 60 * 1000);
 
+// Throttle peer cleanup to reduce unnecessary updates
+let lastCleanup = 0;
+const cleanupInterval = 30 * 60 * 1000; // Increase to 30 minutes
+const cleanupThrottle = 10 * 60 * 1000; // Throttle to 10 minutes between cleanups
+
 setInterval(() => {
+    const now = Date.now();
+    if (now - lastCleanup < cleanupThrottle) {
+        return;
+    }
+
+    lastCleanup = now;
     gun.get('knownPeers').map().once((peer, id) => {
         if (peer && peer.url && peer.timestamp) {
-            const now = Date.now();
             const age = now - peer.timestamp;
             if (age > 10 * 60 * 1000) {
                 console.log('Removing stale peer:', peer.url);
@@ -75,7 +87,7 @@ setInterval(() => {
             }
         }
     });
-}, 5 * 60 * 1000);
+}, cleanupInterval);
 
 // In-memory cache for profiles
 const profileCache = new Map();
@@ -95,12 +107,10 @@ function normalizeUrl(url) {
 }
 
 async function getProfileWithRetries(did, retries = 5, delay = 200) {
-    // Check cache first
     if (profileCache.has(did)) {
         return profileCache.get(did);
     }
 
-    // Retry fetching the profile from Gun.js
     for (let attempt = 1; attempt <= retries; attempt++) {
         const profile = await new Promise((resolve) => {
             gun.get('profiles').get(did).once((data) => {
@@ -110,7 +120,6 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
                         profilePicture: data.profilePicture,
                     });
                 } else {
-                    // Fallback to user-specific namespace
                     gun.get(`user_${did}`).get('profile').once((userData) => {
                         if (userData && userData.handle) {
                             resolve({
@@ -126,7 +135,6 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
         });
 
         if (profile) {
-            // Cache the profile for 5 minutes
             profileCache.set(did, profile);
             setTimeout(() => profileCache.delete(did), 5 * 60 * 1000);
             return profile;
@@ -175,7 +183,7 @@ app.get('/api/annotations', async (req, res) => {
                 setTimeout(() => {
                     console.log(`Attempt ${attempt}: Annotations found:`, annotationList);
                     resolve(annotationList);
-                }, 1000); // Reduced from 5000ms to 1000ms
+                }, 1000);
             });
 
             if (annotations.length > 0 || attempt === maxRetries) {
