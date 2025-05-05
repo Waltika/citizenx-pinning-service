@@ -20,17 +20,8 @@ app.use(cors({
             'https://citizenx.app',
             '*', // Specific extension origin
         ];
-
-        // Allow requests with no origin (e.g., server-to-server) or from allowed origins
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, origin || '*');
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
     },
-    methods: ['GET', 'POST', 'OPTIONS'], // Explicitly allow OPTIONS for preflight
-    allowedHeaders: ['Content-Type'], // Allow common headers
-    optionsSuccessStatus: 204, // Ensure preflight requests return 204 No Content
+    methods: ['GET', 'POST', 'OPTIONS'], //     methods: ['GET', 'POST', 'OPTIONS'],
 }));
 
 const server = http.createServer(app).listen(port);
