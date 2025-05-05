@@ -18,10 +18,19 @@ app.use(cors({
         // Allow requests from specific origins
         const allowedOrigins = [
             'https://citizenx.app',
-            '*', // Specific extension origin
+            'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Specific extension origin
         ];
+
+        // Allow requests with no origin (e.g., server-to-server) or from allowed origins
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, origin || '*');
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
     },
-    methods: ['GET', 'POST', 'OPTIONS'], //     methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'POST', 'OPTIONS'], // Explicitly allow OPTIONS for preflight
+    allowedHeaders: ['Content-Type'], // Allow common headers
+    optionsSuccessStatus: 204, // Ensure preflight requests return 204 No Content
 }));
 
 const server = http.createServer(app).listen(port);
@@ -36,34 +45,6 @@ try {
 } catch (error) {
     console.error('Failed to create data directory:', dataDir, error);
     console.warn('Data persistence may not work on Render free plan without a persistent disk.');
-}
-
-// Ensure the /var/data directory exists and create /var/data/short.key if it doesn't exist
-const shortKeyPath = '/var/data/short.key';
-try {
-    const shortKeyDir = path.dirname(shortKeyPath);
-    if (!fs.existsSync(shortKeyDir)) {
-        fs.mkdirSync(shortKeyDir, { recursive: true });
-        console.log('Created directory for Short.io API key:', shortKeyDir);
-    }
-
-    if (!fs.existsSync(shortKeyPath)) {
-        // Write the API key to the file if it doesn't exist
-        const shortIoApiKey = 'sk_kRvyN0R1rRpdoo5D'; // Initial setup; remove after first deployment
-        fs.writeFileSync(shortKeyPath, shortIoApiKey, { flag: 'wx' });
-        console.log('Created Short.io API key file:', shortKeyPath);
-    }
-} catch (error) {
-    console.error('Failed to create Short.io API key file:', shortKeyPath, error);
-}
-
-// Read the Short.io API key from /var/data/short.key
-let shortIoApiKey;
-try {
-    shortIoApiKey = fs.readFileSync(shortKeyPath, 'utf8').trim();
-    console.log('Successfully read Short.io API key from:', shortKeyPath);
-} catch (error) {
-    console.error('Failed to read Short.io API key from:', shortKeyPath, error);
 }
 
 const gun = Gun({
@@ -261,68 +242,46 @@ app.get('/api/annotations', async (req, res) => {
     }
 });
 
-// New endpoint to shorten URLs using Short.io API
+// New endpoint to shorten URLs using T.LY API
 app.get('/api/shorten-url', async (req, res) => {
     const longUrl = req.query.url;
-    const maxRetries = 3;
-    const retryDelay = 1000; // 1 second delay between retries
+    const tlyApiKey = 'YOUR_TLY_API_KEY'; // Replace with your T.LY API key
 
     if (!longUrl) {
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
-    if (!shortIoApiKey) {
-        console.error('Short.io API key not found at /var/data/short.key');
-        res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
-        return;
-    }
+    try {
+        const apiUrl = `https://t.ly/api/v1/link/shorten`;
+        console.log('Calling T.LY API:', apiUrl);
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const apiUrl = `https://api.short.io/links`;
-            console.log(`Attempt ${attempt}: Calling Short.io API:`, apiUrl);
+        const response = await axios.post(apiUrl, {
+            long_url: longUrl,
+        }, {
+            headers: {
+                'Authorization': `Bearer ${tlyApiKey}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'CitizenX/1.0 (https://citizenx.app; support@citizenx.app)',
+            },
+        });
 
-            const response = await axios.post(apiUrl, {
-                domain: 'citizx.im',
-                originalURL: longUrl,
-            }, {
-                headers: {
-                    'Authorization': shortIoApiKey,
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'CitizenX/1.0 (https://citizenx.app; support@citizenx.app)',
-                },
-            });
+        const data = response.data;
+        console.log('T.LY API Response:', data);
 
-            const data = response.data;
-            console.log(`Attempt ${attempt}: Short.io API Response:`, data);
-
-            if (data.shortURL) {
-                const shortenedUrl = data.shortURL;
-                res.json({ shortenedUrl });
-                return;
-            } else {
-                console.error(`Attempt ${attempt}: Failed to shorten URL:`, data);
-                if (attempt === maxRetries) {
-                    res.json({ shortenedUrl: longUrl }); // Fallback to original URL after max retries
-                    return;
-                }
-            }
-        } catch (error) {
-            console.error(`Attempt ${attempt}: Error calling Short.io API:`, {
-                message: error.message,
-                status: error.response?.status,
-                response: error.response?.data,
-            });
-
-            if (attempt === maxRetries) {
-                console.error('Max retries reached. Falling back to original URL.');
-                res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
-                return;
-            }
-
-            console.log(`Retrying in ${retryDelay}ms...`);
-            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        if (data.short_url) {
+            const shortenedUrl = data.short_url;
+            res.json({ shortenedUrl });
+        } else {
+            console.error('Failed to shorten URL:', data);
+            res.json({ shortenedUrl: longUrl }); // Fallback to original URL
         }
+    } catch (error) {
+        console.error('Error calling T.LY API:', {
+            message: error.message,
+            status: error.response?.status,
+            response: error.response?.data,
+        });
+        res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
     }
 });
 
