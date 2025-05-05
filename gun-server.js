@@ -5,7 +5,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 
-const port = process.env.PORT || 10000; // Updated port to match logs
+const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [];
 
@@ -39,6 +39,23 @@ const gun = Gun({
 // Use a static peerId to persist across server restarts
 const peerId = `${publicUrl}-bootstrap`;
 
+// One-time cleanup of null entries on startup
+const cleanupNullEntries = () => {
+    console.log('Performing one-time cleanup of null entries in knownPeers...');
+    gun.get('knownPeers').map().once((peer, id) => {
+        if (!peer || !peer.url || !peer.timestamp) {
+            console.log('Startup cleanup - Removing null or invalid peer entry:', id);
+            gun.get('knownPeers').get(id).put(null, (ack) => {
+                if (ack.err) {
+                    console.error('Startup cleanup - Failed to remove peer entry:', id, ack.err);
+                } else {
+                    console.log('Startup cleanup - Successfully removed peer entry:', id);
+                }
+            });
+        }
+    });
+};
+
 // Ensure the server's entry is in knownPeers on startup
 const ensureServerPeer = () => {
     console.log('Ensuring server peer in knownPeers...');
@@ -60,8 +77,11 @@ const ensureServerPeer = () => {
     });
 };
 
-// Run on startup and periodically
+// Run cleanup and peer registration on startup
+cleanupNullEntries();
 ensureServerPeer();
+
+// Periodically update server peer timestamp
 setInterval(() => {
     const now = Date.now();
     console.log('Updating server peer timestamp...');
@@ -76,8 +96,8 @@ setInterval(() => {
 
 // Throttle peer cleanup to reduce unnecessary updates
 let lastCleanup = 0;
-const cleanupInterval = 5 * 60 * 1000; // Reduced to 5 minutes for faster cleanup
-const cleanupThrottle = 2 * 60 * 1000; // Throttle to 2 minutes between cleanups
+const cleanupInterval = 5 * 60 * 1000;
+const cleanupThrottle = 2 * 60 * 1000;
 
 setInterval(() => {
     const now = Date.now();
