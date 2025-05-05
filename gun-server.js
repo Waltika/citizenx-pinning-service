@@ -68,8 +68,8 @@ setInterval(() => {
 
 // Throttle peer cleanup to reduce unnecessary updates
 let lastCleanup = 0;
-const cleanupInterval = 30 * 60 * 1000; // Increase to 30 minutes
-const cleanupThrottle = 10 * 60 * 1000; // Throttle to 10 minutes between cleanups
+const cleanupInterval = 10 * 60 * 1000; // Reduced to 10 minutes
+const cleanupThrottle = 5 * 60 * 1000; // Throttle to 5 minutes between cleanups
 
 setInterval(() => {
     const now = Date.now();
@@ -79,10 +79,13 @@ setInterval(() => {
 
     lastCleanup = now;
     gun.get('knownPeers').map().once((peer, id) => {
-        if (peer && peer.url && peer.timestamp) {
+        if (!peer || !peer.url || !peer.timestamp) {
+            console.log('Removing null or invalid peer entry:', id);
+            gun.get('knownPeers').get(id).put(null);
+        } else {
             const age = now - peer.timestamp;
             if (age > 10 * 60 * 1000) {
-                console.log('Removing stale peer:', peer.url);
+                console.log('Removing stale peer:', peer.url, 'Age:', age / 1000, 'seconds');
                 gun.get('knownPeers').get(id).put(null);
             }
         }
