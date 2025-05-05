@@ -4,33 +4,15 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
-import axios from 'axios';
 
 const port = process.env.PORT || 8765;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [];
 
 const app = express();
-
-// Configure CORS with dynamic origin handling
 app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests from specific origins
-        const allowedOrigins = [
-            'https://citizenx.app',
-            'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Specific extension origin
-        ];
-
-        // Allow requests with no origin (e.g., server-to-server) or from allowed origins
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, origin || '*');
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'OPTIONS'], // Explicitly allow OPTIONS for preflight
-    allowedHeaders: ['Content-Type'], // Allow common headers
-    optionsSuccessStatus: 204, // Ensure preflight requests return 204 No Content
+    origin: 'https://citizenx.app',
+    methods: ['GET'],
 }));
 
 const server = http.createServer(app).listen(port);
@@ -239,49 +221,6 @@ app.get('/api/annotations', async (req, res) => {
     } catch (error) {
         console.error('Error fetching annotations:', error);
         res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-// New endpoint to shorten URLs using T.LY API
-app.get('/api/shorten-url', async (req, res) => {
-    const longUrl = req.query.url;
-    const tlyApiKey = 'YOUR_TLY_API_KEY'; // Replace with your T.LY API key
-
-    if (!longUrl) {
-        return res.status(400).json({ error: 'Missing url parameter' });
-    }
-
-    try {
-        const apiUrl = `https://t.ly/api/v1/link/shorten`;
-        console.log('Calling T.LY API:', apiUrl);
-
-        const response = await axios.post(apiUrl, {
-            long_url: longUrl,
-        }, {
-            headers: {
-                'Authorization': `Bearer ${tlyApiKey}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'CitizenX/1.0 (https://citizenx.app; support@citizenx.app)',
-            },
-        });
-
-        const data = response.data;
-        console.log('T.LY API Response:', data);
-
-        if (data.short_url) {
-            const shortenedUrl = data.short_url;
-            res.json({ shortenedUrl });
-        } else {
-            console.error('Failed to shorten URL:', data);
-            res.json({ shortenedUrl: longUrl }); // Fallback to original URL
-        }
-    } catch (error) {
-        console.error('Error calling T.LY API:', {
-            message: error.message,
-            status: error.response?.status,
-            response: error.response?.data,
-        });
-        res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
     }
 });
 
