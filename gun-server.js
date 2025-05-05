@@ -4,16 +4,33 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
-import axios from 'axios'; // Added for Ulvis API calls
+import axios from 'axios';
 
 const port = process.env.PORT || 8765;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [];
 
 const app = express();
+
+// Configure CORS with dynamic origin handling
 app.use(cors({
-    origin: ['https://citizenx.app', '*'], // Allow extension origins
-    methods: ['GET', 'POST'], // Allow GET and POST for /api/shorten-url
+    origin: (origin, callback) => {
+        // Allow requests from specific origins
+        const allowedOrigins = [
+            'https://citizenx.app',
+            'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Specific extension origin
+        ];
+
+        // Allow requests with no origin (e.g., server-to-server) or from allowed origins
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, origin || '*');
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'], // Explicitly allow OPTIONS for preflight
+    allowedHeaders: ['Content-Type'], // Allow common headers
+    optionsSuccessStatus: 204, // Ensure preflight requests return 204 No Content
 }));
 
 const server = http.createServer(app).listen(port);
@@ -225,34 +242,45 @@ app.get('/api/annotations', async (req, res) => {
     }
 });
 
-// New endpoint to shorten URLs using Ulvis API
+// New endpoint to shorten URLs using T.LY API
 app.get('/api/shorten-url', async (req, res) => {
     const longUrl = req.query.url;
+    const tlyApiKey = 'YOUR_TLY_API_KEY'; // Replace with your T.LY API key
 
     if (!longUrl) {
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
     try {
-        // Generate a custom alias based on a hash of the URL (for uniqueness)
-        const alias = `citizenx-${Date.now()}`; // Simplified for now; can use a hash later
-        const apiUrl = `https://ulvis.net/API/write/get?url=${encodeURIComponent(longUrl)}&custom=${alias}&type=json`;
-        console.log('Calling Ulvis API:', apiUrl);
+        const apiUrl = `https://t.ly/api/v1/link/shorten`;
+        console.log('Calling T.LY API:', apiUrl);
 
-        const response = await axios.get(apiUrl);
+        const response = await axios.post(apiUrl, {
+            long_url: longUrl,
+        }, {
+            headers: {
+                'Authorization': `Bearer ${tlyApiKey}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'CitizenX/1.0 (https://citizenx.app; support@citizenx.app)',
+            },
+        });
+
         const data = response.data;
+        console.log('T.LY API Response:', data);
 
-        console.log('Ulvis API Response:', data);
-
-        if (data.success === true) {
-            const shortenedUrl = data.data.url;
+        if (data.short_url) {
+            const shortenedUrl = data.short_url;
             res.json({ shortenedUrl });
         } else {
             console.error('Failed to shorten URL:', data);
             res.json({ shortenedUrl: longUrl }); // Fallback to original URL
         }
     } catch (error) {
-        console.error('Error calling Ulvis API:', error.message);
+        console.error('Error calling T.LY API:', {
+            message: error.message,
+            status: error.response?.status,
+            response: error.response?.data,
+        });
         res.status(500).json({ shortenedUrl: longUrl }); // Fallback to original URL
     }
 });
