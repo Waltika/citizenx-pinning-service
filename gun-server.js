@@ -5,7 +5,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 
-const port = process.env.PORT || 8765;
+const port = process.env.PORT || 10000; // Updated port to match logs
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [];
 
@@ -41,15 +41,21 @@ const peerId = `${publicUrl}-bootstrap`;
 
 // Ensure the server's entry is in knownPeers on startup
 const ensureServerPeer = () => {
+    console.log('Ensuring server peer in knownPeers...');
     gun.get('knownPeers').get(peerId).once((data) => {
-        if (!data || !data.url || !data.timestamp || (Date.now() - data.timestamp > 10 * 60 * 1000)) {
-            gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: Date.now() }, (ack) => {
+        console.log('Current server peer data:', data);
+        const now = Date.now();
+        if (!data || !data.url || !data.timestamp || (now - data.timestamp > 10 * 60 * 1000)) {
+            console.log('Registering server peer:', peerId);
+            gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: now }, (ack) => {
                 if (ack.err) {
                     console.error('Failed to register server in knownPeers:', ack.err);
                 } else {
-                    console.log(`Registered server in knownPeers: ${publicUrl}/gun`);
+                    console.log(`Successfully registered server in knownPeers: ${publicUrl}/gun`);
                 }
             });
+        } else {
+            console.log('Server peer already registered and valid:', data.url, 'Age:', (now - data.timestamp) / 1000, 'seconds');
         }
     });
 };
@@ -57,7 +63,9 @@ const ensureServerPeer = () => {
 // Run on startup and periodically
 ensureServerPeer();
 setInterval(() => {
-    gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: Date.now() }, (ack) => {
+    const now = Date.now();
+    console.log('Updating server peer timestamp...');
+    gun.get('knownPeers').get(peerId).put({ url: `${publicUrl}/gun`, timestamp: now }, (ack) => {
         if (ack.err) {
             console.error('Failed to update server timestamp in knownPeers:', ack.err);
         } else {
@@ -68,8 +76,8 @@ setInterval(() => {
 
 // Throttle peer cleanup to reduce unnecessary updates
 let lastCleanup = 0;
-const cleanupInterval = 10 * 60 * 1000; // Reduced to 10 minutes
-const cleanupThrottle = 5 * 60 * 1000; // Throttle to 5 minutes between cleanups
+const cleanupInterval = 5 * 60 * 1000; // Reduced to 5 minutes for faster cleanup
+const cleanupThrottle = 2 * 60 * 1000; // Throttle to 2 minutes between cleanups
 
 setInterval(() => {
     const now = Date.now();
@@ -78,15 +86,28 @@ setInterval(() => {
     }
 
     lastCleanup = now;
+    console.log('Running peer cleanup...');
     gun.get('knownPeers').map().once((peer, id) => {
         if (!peer || !peer.url || !peer.timestamp) {
             console.log('Removing null or invalid peer entry:', id);
-            gun.get('knownPeers').get(id).put(null);
+            gun.get('knownPeers').get(id).put(null, (ack) => {
+                if (ack.err) {
+                    console.error('Failed to remove peer entry:', id, ack.err);
+                } else {
+                    console.log('Successfully removed peer entry:', id);
+                }
+            });
         } else {
             const age = now - peer.timestamp;
             if (age > 10 * 60 * 1000) {
                 console.log('Removing stale peer:', peer.url, 'Age:', age / 1000, 'seconds');
-                gun.get('knownPeers').get(id).put(null);
+                gun.get('knownPeers').get(id).put(null, (ack) => {
+                    if (ack.err) {
+                        console.error('Failed to remove stale peer:', id, ack.err);
+                    } else {
+                        console.log('Successfully removed stale peer:', id);
+                    }
+                });
             }
         }
     });
