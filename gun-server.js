@@ -12,8 +12,12 @@ const initialPeers = [];
 
 const app = express();
 app.use(cors({
-    origin: 'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap',
-    methods: ['GET', 'POST'],
+    origin: [
+        'https://citizenx.app', // Allow requests from the frontend
+        'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Allow requests from the Chrome extension
+    ],
+    methods: ['GET', 'POST'], // Specify allowed methods
+    allowedHeaders: ['Content-Type'], // Specify allowed headers
 }));
 
 const server = http.createServer(app).listen(port);
