@@ -71,6 +71,33 @@ const cleanupNullEntries = () => {
     });
 };
 
+// Add this after the peer cleanup interval in gun-server.js
+
+// Periodically clean up tombstones in annotations
+setInterval(() => {
+    const now = Date.now();
+    console.log('Running annotations cleanup...');
+    gun.get('annotations').map().once((data, url) => {
+        if (!url) return;
+        const annotations = gun.get('annotations').get(url);
+        annotations.map().once((annotation, id) => {
+            if (annotation === null) {
+                console.log(`Found tombstone for URL: ${url}, ID: ${id}`);
+                // Already tombstoned, no further action needed
+            } else if (annotation?.isDeleted) {
+                console.log(`Found marked-for-deletion annotation for URL: ${url}, ID: ${id}, tombstoning...`);
+                annotations.get(id).put(null, (ack) => {
+                    if (ack.err) {
+                        console.error(`Failed to tombstone marked-for-deletion annotation for URL: ${url}, ID: ${id}, Error:`, ack.err);
+                    } else {
+                        console.log(`Successfully tombstoned marked-for-deletion annotation for URL: ${url}, ID: ${id}`);
+                    }
+                });
+            }
+        });
+    });
+}, 60 * 60 * 1000); // Run every hour
+
 // Ensure the server's entry is in knownPeers on startup
 const ensureServerPeer = () => {
     console.log('Ensuring server peer in knownPeers...');
