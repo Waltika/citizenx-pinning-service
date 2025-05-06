@@ -22,8 +22,11 @@
     "@libp2p/webrtc": "^5.2.12",
     "axios": "^1.9.0",
     "cors": "^2.8.5",
+    "dompurify": "^3.2.5",
     "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
     "gun": "^0.2020.1240",
-    "js-ipfs": "^0.0.1"
+    "js-ipfs": "^0.0.1",
+    "jsdom": "^26.1.0"
   }
 }

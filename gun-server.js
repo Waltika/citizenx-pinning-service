@@ -1,3 +1,4 @@
+// gun-server.js
 import Gun from 'gun';
 import http from 'http';
 import express from 'express';
@@ -5,20 +6,61 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
+import RateLimit from 'express-rate-limit';
+import DOMPurify from 'dompurify';
+import {JSDOM} from 'jsdom';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [];
 
 const app = express();
-app.use(cors({
+
+// Setup DOMPurify with JSDOM
+const window = new JSDOM('').window;
+const purify = DOMPurify(window);
+
+// Enhanced CORS configuration with production extension ID
+const corsOptions = {
     origin: [
-        'https://citizenx.app', // Allow requests from the frontend
-        'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Allow requests from the Chrome extension
+        'https://citizenx.app',
+        'chrome-extension://mbmlbbmhjhcmmpbieofegoefkhnbjmbj', // Production Chrome extension ID
+        'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Development Chrome extention ID
     ],
-    methods: ['GET', 'POST'], // Specify allowed methods
-    allowedHeaders: ['Content-Type'], // Specify allowed headers
-}));
+    methods: ['GET', 'POST', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'X-User-DID'],
+    optionsSuccessStatus: 200,
+};
+app.use(cors(corsOptions));
+
+// Rate limiting configuration
+const limiter = RateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each DID to 100 requests per windowMs
+    keyGenerator: (req) => req.headers['x-user-did'] || req.ip, // Use DID if available, else IP
+    message: 'Too many requests, please try again later.',
+});
+app.use(limiter);
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// Sanitize input middleware
+const sanitizeInput = (req, res, next) => {
+    if (req.body) {
+        const sanitizeObject = (obj) => {
+            for (const key in obj) {
+                if (typeof obj[key] === 'string') {
+                    obj[key] = purify.sanitize(obj[key]);
+                } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                    sanitizeObject(obj[key]);
+                }
+            }
+        };
+        sanitizeObject(req.body);
+    }
+    next();
+};
 
 const server = http.createServer(app).listen(port);
 
@@ -26,7 +68,7 @@ const server = http.createServer(app).listen(port);
 const dataDir = '/var/data/gun-data';
 try {
     if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
+        fs.mkdirSync(dataDir, {recursive: true});
         console.log('Created data directory:', dataDir);
     }
 } catch (error) {
@@ -54,6 +96,67 @@ const gun = Gun({
 // Use a static peerId to persist across server restarts
 const peerId = `${publicUrl}-bootstrap`;
 
+// Helper function to check if a user is an admin
+async function isAdmin(did) {
+    return new Promise((resolve) => {
+        gun.get('admins').get(did).once((data) => {
+            resolve(!!data);
+        });
+    });
+}
+
+// Middleware to verify deletion permissions
+const verifyDeletePermission = async (req, res, next) => {
+    const requesterDid = req.headers['x-user-did'];
+    const {url, annotationId, commentId} = req.body;
+
+    if (!requesterDid) {
+        return res.status(401).json({error: 'Unauthorized: Missing X-User-DID header'});
+    }
+
+    if (!url || !annotationId) {
+        return res.status(400).json({error: 'Missing required parameters'});
+    }
+
+    try {
+        const normalizedUrl = normalizeUrl(url);
+        const annotationNode = gun.get('annotations').get(normalizedUrl);
+        const annotation = await new Promise((resolve) => {
+            annotationNode.get(annotationId).once((data) => resolve(data));
+        });
+
+        if (!annotation) {
+            return res.status(404).json({error: 'Annotation not found'});
+        }
+
+        let targetAuthor;
+        if (commentId) {
+            // Verify comment deletion
+            const comment = await new Promise((resolve) => {
+                annotationNode.get(annotationId).get('comments').get(commentId).once((data) => resolve(data));
+            });
+
+            if (!comment) {
+                return res.status(404).json({error: 'Comment not found'});
+            }
+            targetAuthor = comment.author;
+        } else {
+            // Verify annotation deletion
+            targetAuthor = annotation.author;
+        }
+
+        const isRequesterAdmin = await isAdmin(requesterDid);
+        if (requesterDid !== targetAuthor && !isRequesterAdmin) {
+            return res.status(403).json({error: 'Forbidden: You can only delete your own content or must be an admin'});
+        }
+
+        next();
+    } catch (error) {
+        console.error('Error verifying delete permission:', error);
+        res.status(500).json({error: 'Internal server error'});
+    }
+};
+
 // One-time cleanup of null entries on startup
 const cleanupNullEntries = () => {
     console.log('Performing one-time cleanup of null entries in knownPeers...');
@@ -71,8 +174,6 @@ const cleanupNullEntries = () => {
     });
 };
 
-// Add this after the peer cleanup interval in gun-server.js
-
 // Periodically clean up tombstones in annotations
 setInterval(() => {
     const now = Date.now();
@@ -83,7 +184,6 @@ setInterval(() => {
         annotations.map().once((annotation, id) => {
             if (annotation === null) {
                 console.log(`Found tombstone for URL: ${url}, ID: ${id}`);
-                // Already tombstoned, no further action needed
             } else if (annotation?.isDeleted) {
                 console.log(`Found marked-for-deletion annotation for URL: ${url}, ID: ${id}, tombstoning...`);
                 annotations.get(id).put(null, (ack) => {
@@ -98,7 +198,7 @@ setInterval(() => {
     });
 }, 60 * 60 * 1000); // Run every hour
 
-// Ensure the server's entry is in knownPeers on startup
+// Ensure the server's entry in knownPeers on startup
 const ensureServerPeer = () => {
     console.log('Ensuring server peer in knownPeers...');
     gun.get('knownPeers').get(peerId).once((data) => {
@@ -254,15 +354,15 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
     }
 
     console.error('Failed to load profile for DID after retries:', did);
-    return { handle: 'Unknown' };
+    return {handle: 'Unknown'};
 }
 
 // New endpoint for URL shortening
-app.post('/api/shorten', express.json(), async (req, res) => {
-    const { url } = req.body;
+app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
+    const {url} = req.body;
 
     if (!url) {
-        return res.status(400).json({ error: 'Missing url parameter' });
+        return res.status(400).json({error: 'Missing url parameter'});
     }
 
     try {
@@ -278,19 +378,20 @@ app.post('/api/shorten', express.json(), async (req, res) => {
 
         const shortUrl = response.data.shortURL;
         console.log(`Successfully shortened URL: ${url} to ${shortUrl}`);
-        res.json({ shortUrl });
+        res.json({shortUrl});
     } catch (error) {
         console.error('Error shortening URL:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Failed to shorten URL' });
+        res.status(500).json({error: 'Failed to shorten URL'});
     }
 });
 
+// Endpoint to fetch annotations
 app.get('/api/annotations', async (req, res) => {
     const url = req.query.url;
     const annotationId = req.query.annotationId;
 
     if (!url) {
-        return res.status(400).json({ error: 'Missing url parameter' });
+        return res.status(400).json({error: 'Missing url parameter'});
     }
 
     try {
@@ -306,7 +407,7 @@ app.get('/api/annotations', async (req, res) => {
                 const annotationList = [];
                 const loadedAnnotations = new Set();
                 annotationNode.map().once((annotation) => {
-                    if (annotation && !loadedAnnotations.has(annotation.id)) {
+                    if (annotation && !loadedAnnotations.has(annotation.id) && !annotation.isDeleted) {
                         loadedAnnotations.add(annotation.id);
                         annotationList.push({
                             id: annotation.id,
@@ -332,7 +433,7 @@ app.get('/api/annotations', async (req, res) => {
         }
 
         if (!annotations || annotations.length === 0) {
-            return res.status(404).json({ error: 'No annotations found for this URL' });
+            return res.status(404).json({error: 'No annotations found for this URL'});
         }
 
         const annotationsWithDetails = await Promise.all(
@@ -342,7 +443,7 @@ app.get('/api/annotations', async (req, res) => {
                 const comments = await new Promise((resolve) => {
                     const commentList = [];
                     annotationNode.get(annotation.id).get('comments').map().once((comment) => {
-                        if (comment) {
+                        if (comment && !comment.isDeleted) {
                             commentList.push({
                                 id: comment.id,
                                 content: comment.content,
@@ -373,10 +474,96 @@ app.get('/api/annotations', async (req, res) => {
             })
         );
 
-        res.json({ annotations: annotationsWithDetails });
+        res.json({annotations: annotationsWithDetails});
     } catch (error) {
         console.error('Error fetching annotations:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({error: 'Internal server error'});
+    }
+});
+
+// Endpoint to delete annotations
+app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req, res) => {
+    const {url, annotationId} = req.body;
+
+    try {
+        const normalizedUrl = normalizeUrl(url);
+        const annotationNode = gun.get('annotations').get(normalizedUrl);
+
+        // Mark as deleted
+        await new Promise((resolve, reject) => {
+            annotationNode.get(annotationId).put({isDeleted: true}, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to mark annotation as deleted for URL: ${normalizedUrl}, ID: ${annotationId}, Error:`, ack.err);
+                    reject(new Error(ack.err));
+                } else {
+                    console.log(`Successfully marked annotation as deleted for URL: ${normalizedUrl}, ID: ${annotationId}`);
+                    resolve();
+                }
+            });
+        });
+
+        // Tombstone the annotation
+        await new Promise((resolve, reject) => {
+            annotationNode.get(annotationId).put(null, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to tombstone annotation for URL: ${normalizedUrl}, ID: ${annotationId}, Error:`, ack.err);
+                    reject(new Error(ack.err));
+                } else {
+                    console.log(`Successfully tombstoned annotation for URL: ${normalizedUrl}, ID: ${annotationId}`);
+                    resolve();
+                }
+            });
+        });
+
+        res.json({success: true});
+    } catch (error) {
+        console.error('Error deleting annotation:', error);
+        res.status(500).json({error: 'Internal server error'});
+    }
+});
+
+// Endpoint to delete comments
+app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, res) => {
+    const {url, annotationId, commentId} = req.body;
+
+    if (!commentId) {
+        return res.status(400).json({error: 'Missing commentId parameter'});
+    }
+
+    try {
+        const normalizedUrl = normalizeUrl(url);
+        const annotationNode = gun.get('annotations').get(normalizedUrl);
+
+        // Mark comment as deleted
+        await new Promise((resolve, reject) => {
+            annotationNode.get(annotationId).get('comments').get(commentId).put({isDeleted: true}, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to mark comment as deleted for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}, Error:`, ack.err);
+                    reject(new Error(ack.err));
+                } else {
+                    console.log(`Successfully marked comment as deleted for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}`);
+                    resolve();
+                }
+            });
+        });
+
+        // Tombstone the comment
+        await new Promise((resolve, reject) => {
+            annotationNode.get(annotationId).get('comments').get(commentId).put(null, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to tombstone comment for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}, Error:`, ack.err);
+                    reject(new Error(ack.err));
+                } else {
+                    console.log(`Successfully tombstoned comment for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}`);
+                    resolve();
+                }
+            });
+        });
+
+        res.json({success: true});
+    } catch (error) {
+        console.error('Error deleting comment:', error);
+        res.status(500).json({error: 'Internal server error'});
     }
 });
 
