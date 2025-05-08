@@ -632,7 +632,7 @@ app.get('/api/annotations', async (req, res) => {
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []), // Sub-shard
         ];
 
-        const maxRetries = 2; // Reduced from 3 to 2
+        const maxRetries = 2;
         let annotations = [];
 
         // Step 1: Fetch annotations
@@ -709,7 +709,7 @@ app.get('/api/annotations', async (req, res) => {
             console.log(
                 `Retrying annotation fetch for URL: ${normalizedUrl}, attempt ${attempt}/${maxRetries}`
             );
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Reduced retry delay from 1000ms to 500ms
         }
         const fetchAnnotationsEnd = Date.now();
         console.log(`[Timing] Total fetch annotations time: ${fetchAnnotationsEnd - fetchAnnotationsStart}ms`);
