@@ -374,6 +374,116 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
     return { handle: 'Unknown' };
 }
 
+// Debug endpoint to inspect sharded node data
+app.get('/api/debug/annotations', async (req, res) => {
+    const url = req.query.url;
+    const annotationId = req.query.annotationId;
+
+    if (!url) {
+        return res.status(400).json({ error: 'Missing url parameter' });
+    }
+    if (!annotationId) {
+        return res.status(400).json({ error: 'Missing annotationId parameter' });
+    }
+
+    try {
+        const normalizedUrl = normalizeUrl(url);
+        console.log('Debug - Normalized URL:', normalizedUrl);
+
+        const { domainShard, subShard } = getShardKey(normalizedUrl);
+        const annotationNodes = [
+            gun.get(domainShard).get(normalizedUrl),
+            ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
+        ];
+
+        const legacyNode = gun.get('annotations').get(normalizedUrl);
+
+        // Fetch from sharded nodes
+        const shardedData = await Promise.all(
+            annotationNodes.map((node) =>
+                new Promise((resolve) => {
+                    const annotationData = {};
+                    node.get(annotationId).once((annotation) => {
+                        if (annotation) {
+                            annotationData.annotation = {
+                                id: annotationId,
+                                url: annotation.url,
+                                content: annotation.content,
+                                author: annotation.author,
+                                timestamp: annotation.timestamp,
+                                isDeleted: annotation.isDeleted || false,
+                            };
+
+                            const comments = [];
+                            node.get(annotationId).get('comments').map().once((comment, commentId) => {
+                                if (comment) {
+                                    comments.push({
+                                        id: commentId,
+                                        content: comment.content,
+                                        author: comment.author,
+                                        timestamp: comment.timestamp,
+                                        isDeleted: comment.isDeleted || false,
+                                    });
+                                }
+                            });
+                            setTimeout(() => {
+                                annotationData.comments = comments;
+                                resolve(annotationData);
+                            }, 5000);
+                        } else {
+                            resolve(null);
+                        }
+                    });
+                })
+            )
+        );
+
+        // Fetch from legacy node (for debugging)
+        const legacyData = await new Promise((resolve) => {
+            const annotationData = {};
+            legacyNode.get(annotationId).once((annotation) => {
+                if (annotation) {
+                    annotationData.annotation = {
+                        id: annotationId,
+                        url: annotation.url,
+                        content: annotation.content,
+                        author: annotation.author,
+                        timestamp: annotation.timestamp,
+                        isDeleted: annotation.isDeleted || false,
+                    };
+
+                    const comments = [];
+                    legacyNode.get(annotationId).get('comments').map().once((comment, commentId) => {
+                        if (comment) {
+                            comments.push({
+                                id: commentId,
+                                content: comment.content,
+                                author: comment.author,
+                                timestamp: comment.timestamp,
+                                isDeleted: comment.isDeleted || false,
+                            });
+                        }
+                    });
+                    setTimeout(() => {
+                        annotationData.comments = comments;
+                        resolve(annotationData);
+                    }, 5000);
+                } else {
+                    resolve(null);
+                }
+            });
+        });
+
+        res.json({
+            shardedData: shardedData.filter(data => data !== null),
+            legacyData: legacyData || 'Tombstoned or empty',
+        });
+    } catch (error) {
+        console.error('Error debugging annotations:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // New endpoint for URL shortening
 app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
     const { url } = req.body;
