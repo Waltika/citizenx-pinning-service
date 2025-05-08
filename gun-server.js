@@ -521,13 +521,19 @@ app.get('/api/annotations', async (req, res) => {
                                 .get('comments')
                                 .map()
                                 .once((comment) => {
-                                    if (comment && !comment.isDeleted) {
-                                        commentList.push({
-                                            id: comment.id,
-                                            content: comment.content,
-                                            author: comment.author,
-                                            timestamp: comment.timestamp,
-                                        });
+                                    if (comment) {
+                                        if (!comment.isDeleted) {
+                                            commentList.push({
+                                                id: comment.id,
+                                                content: comment.content,
+                                                author: comment.author,
+                                                timestamp: comment.timestamp,
+                                            });
+                                        } else {
+                                            console.log(`Skipped deleted comment for annotation ${annotation.id}, comment ID: ${comment.id}`);
+                                        }
+                                    } else {
+                                        console.warn(`Encountered null or undefined comment for annotation ${annotation.id}`);
                                     }
                                 });
                             setTimeout(() => resolve(commentList), 500);
@@ -644,24 +650,6 @@ app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, r
                 } else {
                     console.log(
                         `Successfully marked comment as deleted for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}`
-                    );
-                    resolve();
-                }
-            });
-        });
-
-        // Tombstone the comment
-        await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).get('comments').get(commentId).put(null, (ack) => {
-                if (ack.err) {
-                    console.error(
-                        `Failed to tombstone comment for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}, Error:`,
-                        ack.err
-                    );
-                    reject(new Error(ack.err));
-                } else {
-                    console.log(
-                        `Successfully tombstoned comment for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}`
                     );
                     resolve();
                 }
