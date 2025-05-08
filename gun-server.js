@@ -734,7 +734,7 @@ app.get('/api/annotations', async (req, res) => {
                 // Step 3: Fetch comments
                 const fetchCommentsStart = Date.now();
                 const commentsData = await Promise.all(
-                    annotationNodes.map((node) =>
+                    annotationNodes.map((node, nodeIndex) =>
                         new Promise((resolve) => {
                             const commentList = [];
                             const commentIds = new Set();
@@ -762,6 +762,7 @@ app.get('/api/annotations', async (req, res) => {
                                         author: comment.author,
                                         timestamp: comment.timestamp,
                                         isDeleted: comment.isDeleted,
+                                        nodeIndex, // Track which node this comment came from
                                     });
                                     commentCount++;
                                 } else if (!comment) {
@@ -801,55 +802,30 @@ app.get('/api/annotations', async (req, res) => {
                     }
                 }
 
-                // Step 4: Consistency check (only if there are comments to process)
+                // Step 4: Consistency check (using fetched data)
                 let resolvedComments = [];
                 if (flattenedComments.length > 0) {
                     const consistencyCheckStart = Date.now();
-                    const commentStates = await Promise.all(
-                        annotationNodes.map((node) =>
-                            new Promise((resolve) => {
-                                const states = {};
-                                let nodesProcessed = 0;
-                                const totalNodes = annotationNodes.length;
 
-                                const timeout = setTimeout(() => {
-                                    console.log(`Consistency check for annotation ${annotation.id} timed out after 1000ms`);
-                                    nodesProcessed = totalNodes;
-                                    resolve(states);
-                                }, 1000);
+                    // Group comments by ID to check for inconsistencies across nodes
+                    const commentsById = new Map();
+                    for (const comment of flattenedComments) {
+                        if (!commentsById.has(comment.id)) {
+                            commentsById.set(comment.id, []);
+                        }
+                        commentsById.get(comment.id).push(comment);
+                    }
 
-                                node.get(annotation.id).get('comments').map().once((comment, commentId) => {
-                                    if (comment) {
-                                        states[commentId] = comment.isDeleted || false;
-                                    }
-                                    nodesProcessed++;
-                                    if (nodesProcessed === totalNodes) {
-                                        clearTimeout(timeout);
-                                        resolve(states);
-                                    }
-                                });
-
-                                // If no comments, resolve immediately
-                                setTimeout(() => {
-                                    if (nodesProcessed === 0) {
-                                        clearTimeout(timeout);
-                                        resolve(states);
-                                    }
-                                }, 100);
-                            })
-                        )
-                    );
-
-                    // Resolve inconsistencies: Include a comment if it's not deleted in any node
+                    // Resolve inconsistencies: Include a comment if it's not deleted in at least one node
                     resolvedComments = [];
                     const resolvedCommentIds = new Set();
-                    for (const comment of flattenedComments) {
-                        if (resolvedCommentIds.has(comment.id)) continue;
-                        resolvedCommentIds.add(comment.id);
+                    for (const [commentId, commentInstances] of commentsById.entries()) {
+                        if (resolvedCommentIds.has(commentId)) continue;
+                        resolvedCommentIds.add(commentId);
 
                         let isDeleted = true;
-                        const statesList = commentStates.map(states => states[comment.id]);
-                        console.log(`Consistency check for comment ${comment.id}: States across nodes:`, statesList);
+                        const statesList = commentInstances.map(c => c.isDeleted);
+                        console.log(`Consistency check for comment ${commentId}: States across nodes:`, statesList);
 
                         // Include the comment if it's not deleted in at least one node
                         for (const state of statesList) {
@@ -859,26 +835,26 @@ app.get('/api/annotations', async (req, res) => {
                             }
                         }
 
-                        if (!isDeleted) {
-                            console.log(`Including comment ${comment.id} as it is not deleted in at least one node`);
-                            resolvedComments.push(comment);
-                        } else {
-                            console.log(`Excluding comment ${comment.id} as it is marked as deleted in all nodes`);
-                        }
-                    }
-
-                    // Check for inconsistencies (for logging purposes)
-                    const firstNodeStates = commentStates[0];
-                    for (let i = 1; i < commentStates.length; i++) {
-                        const nodeStates = commentStates[i];
-                        for (const commentId in firstNodeStates) {
-                            if (nodeStates[commentId] !== undefined && nodeStates[commentId] !== firstNodeStates[commentId]) {
+                        // Check for inconsistencies (for logging purposes)
+                        const firstState = statesList[0];
+                        for (let i = 1; i < statesList.length; i++) {
+                            if (statesList[i] !== firstState) {
                                 console.warn(
-                                    `Consistency warning: Comment ${commentId} has inconsistent isDeleted state across nodes: Node 0: ${firstNodeStates[commentId]}, Node ${i}: ${nodeStates[commentId]}`
+                                    `Consistency warning: Comment ${commentId} has inconsistent isDeleted state across nodes:`,
+                                    statesList
                                 );
                             }
                         }
+
+                        if (!isDeleted) {
+                            console.log(`Including comment ${commentId} as it is not deleted in at least one node`);
+                            // Use the first instance of the comment (arbitrarily chosen)
+                            resolvedComments.push(commentInstances[0]);
+                        } else {
+                            console.log(`Excluding comment ${commentId} as it is marked as deleted in all nodes`);
+                        }
                     }
+
                     const consistencyCheckEnd = Date.now();
                     console.log(`[Timing] Consistency check for annotation ${annotation.id} took ${consistencyCheckEnd - consistencyCheckStart}ms`);
                 } else {
