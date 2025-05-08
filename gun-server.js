@@ -333,11 +333,15 @@ setInterval(() => {
 const profileCache = new Map();
 
 async function getProfileWithRetries(did, retries = 5, delay = 200) {
+    const startTime = Date.now();
     if (profileCache.has(did)) {
+        const endTime = Date.now();
+        console.log(`Profile fetch for DID: ${did} (cached) took ${endTime - startTime}ms`);
         return profileCache.get(did);
     }
 
     for (let attempt = 1; attempt <= retries; attempt++) {
+        const attemptStartTime = Date.now();
         const profile = await new Promise((resolve) => {
             gun.get('profiles').get(did).once((data) => {
                 if (data && data.handle) {
@@ -360,9 +364,14 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
             });
         });
 
+        const attemptEndTime = Date.now();
+        console.log(`Profile fetch attempt ${attempt}/${retries} for DID: ${did} took ${attemptEndTime - attemptStartTime}ms`);
+
         if (profile) {
             profileCache.set(did, profile);
             setTimeout(() => profileCache.delete(did), 5 * 60 * 1000);
+            const endTime = Date.now();
+            console.log(`Profile fetch for DID: ${did} (successful) took ${endTime - startTime}ms`);
             return profile;
         }
 
@@ -371,6 +380,8 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
     }
 
     console.error('Failed to load profile for DID after retries:', did);
+    const endTime = Date.now();
+    console.log(`Profile fetch for DID: ${did} (failed) took ${endTime - startTime}ms`);
     return { handle: 'Unknown' };
 }
 
@@ -518,17 +529,25 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
 
 // Endpoint to fetch annotations
 app.get('/api/annotations', async (req, res) => {
+    const totalStartTime = Date.now();
+    console.log(`[Timing] Starting /api/annotations request at ${new Date().toISOString()}`);
+
     const url = req.query.url;
     const annotationId = req.query.annotationId;
 
     if (!url) {
+        console.log(`[Timing] Request failed: Missing url parameter`);
+        const endTime = Date.now();
+        console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
     try {
         // Clear profile cache to avoid stale data
+        const cacheClearStart = Date.now();
         profileCache.clear();
-        console.log('Cleared profile cache for request');
+        const cacheClearEnd = Date.now();
+        console.log(`[Timing] Cleared profile cache in ${cacheClearEnd - cacheClearStart}ms`);
 
         const normalizedUrl = normalizeUrl(url);
         console.log('Normalized URL for query:', normalizedUrl);
@@ -542,7 +561,10 @@ app.get('/api/annotations', async (req, res) => {
         const maxRetries = 3;
         let annotations = [];
 
+        // Step 1: Fetch annotations
+        const fetchAnnotationsStart = Date.now();
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            const attemptStartTime = Date.now();
             const loadedAnnotations = new Set();
             annotations = await Promise.all(
                 annotationNodes.map((node) =>
@@ -578,10 +600,13 @@ app.get('/api/annotations', async (req, res) => {
                                 annotationList
                             );
                             resolve(annotationList);
-                        }, 5000); // Increased timeout to match debug endpoint
+                        }, 5000);
                     })
                 )
             );
+
+            const attemptEndTime = Date.now();
+            console.log(`[Timing] Fetch annotations attempt ${attempt}/${maxRetries} took ${attemptEndTime - attemptStartTime}ms`);
 
             // Flatten and deduplicate annotations
             annotations = [...new Set(annotations.flat())];
@@ -595,16 +620,26 @@ app.get('/api/annotations', async (req, res) => {
             );
             await new Promise((resolve) => setTimeout(resolve, 1000));
         }
+        const fetchAnnotationsEnd = Date.now();
+        console.log(`[Timing] Total fetch annotations time: ${fetchAnnotationsEnd - fetchAnnotationsStart}ms`);
 
         if (!annotations || annotations.length === 0) {
             console.log(`No valid annotations found for URL: ${normalizedUrl} after ${maxRetries} attempts`);
+            const endTime = Date.now();
+            console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
             return res.status(404).json({ error: 'No annotations found for this URL' });
         }
 
         const annotationsWithDetails = await Promise.all(
             annotations.map(async (annotation) => {
+                // Step 2: Fetch profile for annotation author
+                const profileStartTime = Date.now();
                 const profile = await getProfileWithRetries(annotation.author);
+                const profileEndTime = Date.now();
+                console.log(`[Timing] Profile fetch for annotation author ${annotation.author} took ${profileEndTime - profileStartTime}ms`);
 
+                // Step 3: Fetch comments
+                const fetchCommentsStart = Date.now();
                 const commentsData = await Promise.all(
                     annotationNodes.map((node) =>
                         new Promise((resolve) => {
@@ -642,6 +677,8 @@ app.get('/api/annotations', async (req, res) => {
                         })
                     )
                 );
+                const fetchCommentsEnd = Date.now();
+                console.log(`[Timing] Fetch comments for annotation ${annotation.id} took ${fetchCommentsEnd - fetchCommentsStart}ms`);
 
                 // Flatten and deduplicate comments
                 const flattenedComments = [];
@@ -655,7 +692,8 @@ app.get('/api/annotations', async (req, res) => {
                     }
                 }
 
-                // Consistency check across nodes
+                // Step 4: Consistency check
+                const consistencyCheckStart = Date.now();
                 const commentStates = await Promise.all(
                     annotationNodes.map((node) =>
                         new Promise((resolve) => {
@@ -686,7 +724,11 @@ app.get('/api/annotations', async (req, res) => {
                         }
                     }
                 }
+                const consistencyCheckEnd = Date.now();
+                console.log(`[Timing] Consistency check for annotation ${annotation.id} took ${consistencyCheckEnd - consistencyCheckStart}ms`);
 
+                // Step 5: Fetch profiles for comment authors
+                const fetchCommentProfilesStart = Date.now();
                 const commentsWithAuthors = await Promise.all(
                     flattenedComments.map(async (comment) => {
                         const commentProfile = await getProfileWithRetries(comment.author);
@@ -696,6 +738,8 @@ app.get('/api/annotations', async (req, res) => {
                         };
                     })
                 );
+                const fetchCommentProfilesEnd = Date.now();
+                console.log(`[Timing] Fetch comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
 
                 return {
                     ...annotation,
@@ -706,7 +750,8 @@ app.get('/api/annotations', async (req, res) => {
             })
         );
 
-        // Force replication
+        // Step 6: Write replication marker
+        const replicationStart = Date.now();
         const targetNode = subShard
             ? gun.get(subShard).get(normalizedUrl)
             : gun.get(domainShard).get(normalizedUrl);
@@ -720,10 +765,17 @@ app.get('/api/annotations', async (req, res) => {
                 resolve();
             });
         });
+        const replicationEnd = Date.now();
+        console.log(`[Timing] Write replication marker took ${replicationEnd - replicationStart}ms`);
+
+        const endTime = Date.now();
+        console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
 
         res.json({ annotations: annotationsWithDetails });
     } catch (error) {
         console.error('Error fetching annotations:', error);
+        const endTime = Date.now();
+        console.log(`[Timing] Total request time (with error): ${endTime - totalStartTime}ms`);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
