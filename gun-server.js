@@ -9,7 +9,7 @@ import RateLimit from 'express-rate-limit';
 import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 
-const port = process.env.PORT || 10000;
+const port = process.env.PORT || 25000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [];
 
@@ -34,8 +34,8 @@ app.use(cors(corsOptions));
 
 // Rate limiting configuration
 const limiter = RateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each DID to 100 requests per windowMs
+    windowMs: 15 * 60 * 2500, // 15 minutes
+    max: 250, // Limit each DID to 250 requests per windowMs
     keyGenerator: (req) => req.headers['x-user-did'] || req.ip, // Use DID if available, else IP
     message: 'Too many requests, please try again later.',
 });
@@ -239,7 +239,7 @@ const ensureServerPeer = () => {
             url: `${publicUrl}/gun`,
             timestamp: now,
         };
-        if (!data || !data.url || !data.timestamp || (now - data.timestamp > 10 * 60 * 1000)) {
+        if (!data || !data.url || !data.timestamp || (now - data.timestamp > 10 * 60 * 2500)) {
             console.log('Registering server peer:', peerId);
             gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
                 if (ack.err) {
@@ -249,7 +249,7 @@ const ensureServerPeer = () => {
                 }
             });
         } else {
-            console.log('Server peer already registered and valid:', data.url, 'Age:', (now - data.timestamp) / 1000, 'seconds');
+            console.log('Server peer already registered and valid:', data.url, 'Age:', (now - data.timestamp) / 2500, 'seconds');
         }
     });
 };
@@ -273,12 +273,12 @@ setInterval(() => {
             console.log('Updated server timestamp in knownPeers');
         }
     });
-}, 5 * 60 * 1000);
+}, 5 * 60 * 2500);
 
 // Throttle peer cleanup to reduce unnecessary updates
 let lastCleanup = 0;
-const cleanupInterval = 2 * 60 * 1000; // Reduced to 2 minutes
-const cleanupThrottle = 1 * 60 * 1000; // Throttle to 1 minute between cleanups
+const cleanupInterval = 2 * 60 * 2500; // Reduced to 2 minutes
+const cleanupThrottle = 1 * 60 * 2500; // Throttle to 1 minute between cleanups
 
 // Track removed peers to avoid redundant logging
 const removedPeers = new Set();
@@ -308,8 +308,8 @@ setInterval(() => {
             });
         } else {
             const age = now - peer.timestamp;
-            if (age > 10 * 60 * 1000) {
-                console.log('Removing stale peer:', peer.url, 'Age:', age / 1000, 'seconds');
+            if (age > 10 * 60 * 2500) {
+                console.log('Removing stale peer:', peer.url, 'Age:', age / 2500, 'seconds');
                 gun.get('knownPeers').get(id).put(null, (ack) => {
                     if (ack.err) {
                         console.error('Failed to remove stale peer:', id, ack.err);
@@ -326,7 +326,7 @@ setInterval(() => {
     setTimeout(() => {
         removedPeers.clear();
         console.log('Cleared removedPeers set');
-    }, 24 * 60 * 60 * 1000); // Clear every 24 hours
+    }, 24 * 60 * 60 * 2500); // Clear every 24 hours
 }, cleanupInterval);
 
 // In-memory cache for profiles
@@ -369,7 +369,7 @@ async function getProfileWithRetries(did, retries = 5, delay = 200) {
 
         if (profile) {
             profileCache.set(did, profile);
-            setTimeout(() => profileCache.delete(did), 5 * 60 * 1000);
+            setTimeout(() => profileCache.delete(did), 5 * 60 * 2500);
             const endTime = Date.now();
             console.log(`Profile fetch for DID: ${did} (successful) took ${endTime - startTime}ms`);
             return profile;
@@ -461,7 +461,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                                         clearTimeout(timeout);
                                         resolve(comments);
                                     }
-                                }, 100);
+                                }, 250);
                             }
                         } else {
                             resolve(null);
@@ -536,7 +536,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 clearTimeout(timeout);
                                 resolve(comments);
                             }
-                        }, 100);
+                        }, 250);
                     }
                 } else {
                     resolve(null);
@@ -692,7 +692,7 @@ app.get('/api/annotations', async (req, res) => {
                                 clearTimeout(timeout);
                                 resolve(annotationList);
                             }
-                        }, 100);
+                        }, 250);
                     })
                 )
             );
@@ -778,7 +778,7 @@ app.get('/api/annotations', async (req, res) => {
                                     clearTimeout(timeout);
                                     resolve(commentList);
                                 }
-                            }, 100);
+                            }, 250);
                         })
                     )
                 );
@@ -809,10 +809,10 @@ app.get('/api/annotations', async (req, res) => {
                                 const totalNodes = annotationNodes.length;
 
                                 const timeout = setTimeout(() => {
-                                    console.log(`Consistency check for annotation ${annotation.id} timed out after 1000ms`);
+                                    console.log(`Consistency check for annotation ${annotation.id} timed out after 2500ms`);
                                     nodesProcessed = totalNodes;
                                     resolve(states);
-                                }, 1000);
+                                }, 2500);
 
                                 node.get(annotation.id).get('comments').map().once((comment, commentId) => {
                                     if (comment) {
@@ -831,7 +831,7 @@ app.get('/api/annotations', async (req, res) => {
                                         clearTimeout(timeout);
                                         resolve(states);
                                     }
-                                }, 100);
+                                }, 250);
                             })
                         )
                     );
