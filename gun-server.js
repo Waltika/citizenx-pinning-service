@@ -548,19 +548,18 @@ app.get('/api/annotations', async (req, res) => {
                 annotationNodes.map((node) =>
                     new Promise((resolve) => {
                         const annotationList = [];
-                        node.map().once((annotation) => {
-                            if (annotation === null) {
-                                console.log(`Skipped null annotation for URL: ${normalizedUrl}`);
+                        node.map().once((annotation, key) => {
+                            // Skip non-annotation nodes
+                            if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
+                                console.log(`Skipped non-annotation node for URL: ${normalizedUrl}, Key: ${key}, Data:`, annotation);
                                 return;
                             }
-                            if (
-                                !annotation ||
-                                loadedAnnotations.has(annotation.id) ||
-                                annotation.isDeleted
-                            ) {
-                                if (annotation?.isDeleted) {
-                                    console.log(`Skipped deleted annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
-                                }
+                            if (loadedAnnotations.has(annotation.id)) {
+                                console.log(`Skipped duplicate annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
+                                return;
+                            }
+                            if (annotation.isDeleted) {
+                                console.log(`Skipped deleted annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
                                 return;
                             }
                             loadedAnnotations.add(annotation.id);
@@ -571,6 +570,7 @@ app.get('/api/annotations', async (req, res) => {
                                 author: annotation.author,
                                 timestamp: annotation.timestamp,
                             });
+                            console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
                         });
                         setTimeout(() => {
                             console.log(
@@ -578,7 +578,7 @@ app.get('/api/annotations', async (req, res) => {
                                 annotationList
                             );
                             resolve(annotationList);
-                        }, 2000);
+                        }, 5000); // Increased timeout to match debug endpoint
                     })
                 )
             );
@@ -597,6 +597,7 @@ app.get('/api/annotations', async (req, res) => {
         }
 
         if (!annotations || annotations.length === 0) {
+            console.log(`No valid annotations found for URL: ${normalizedUrl} after ${maxRetries} attempts`);
             return res.status(404).json({ error: 'No annotations found for this URL' });
         }
 
@@ -637,7 +638,7 @@ app.get('/api/annotations', async (req, res) => {
                                     }
                                 });
 
-                            setTimeout(() => resolve(commentList), 5000); // Increased timeout
+                            setTimeout(() => resolve(commentList), 5000);
                         })
                     )
                 );
