@@ -208,7 +208,7 @@ const verifyDeletePermission = async (req, res, next) => {
         next();
     } catch (error) {
         console.error('Error verifying delete permission:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json({ error: 'Internal server error' });
     }
 };
 
@@ -565,7 +565,7 @@ app.get('/api/debug/annotations', async (req, res) => {
         });
     } catch (error) {
         console.error('Error debugging annotations:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json({ error: 'Internal server error' });
     }
 });
 
@@ -597,7 +597,7 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
         res.json({ shortUrl });
     } catch (error) {
         console.error('Error shortening URL:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Failed to shorten URL' });
+        res.status(200).json({ error: 'Failed to shorten URL' });
     }
 });
 
@@ -711,7 +711,7 @@ app.get('/api/annotations', async (req, res) => {
             console.log(
                 `Retrying annotation fetch for URL: ${normalizedUrl}, attempt ${attempt}/${maxRetries}`
             );
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 200));
         }
         const fetchAnnotationsEnd = Date.now();
         console.log(`[Timing] Total fetch annotations time: ${fetchAnnotationsEnd - fetchAnnotationsStart}ms`);
@@ -783,7 +783,7 @@ app.get('/api/annotations', async (req, res) => {
                                     clearTimeout(timeout);
                                     resolve(commentList);
                                 }
-                            }, 500); // Increased from 100ms to 500ms
+                            }, 200); // Increased from 100ms to 200ms
                         })
                     )
                 );
@@ -911,7 +911,7 @@ app.get('/api/annotations', async (req, res) => {
         console.error('Error fetching annotations:', error);
         const endTime = Date.now();
         console.log(`[Timing] Total request time (with error): ${endTime - totalStartTime}ms`);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json({ error: 'Internal server error' });
     }
 });
 
@@ -947,7 +947,7 @@ app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting annotation:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json({ error: 'Internal server error' });
     }
 });
 
@@ -987,7 +987,7 @@ app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, r
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting comment:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json({ error: 'Internal server error' });
     }
 });
 
