@@ -59,6 +59,8 @@ function simpleHash(str) {
 async function migrateLegacyData() {
     console.log('Starting migration of legacy annotations...');
 
+    const migratedUrls = new Set();
+
     gun.get('annotations').map().once(async (data, url) => {
         if (!url) {
             console.log('Skipping invalid URL:', url);
@@ -73,12 +75,19 @@ async function migrateLegacyData() {
         const legacyNode = gun.get('annotations').get(normalizedUrl);
 
         // Fetch annotations from legacy node
-        legacyNode.map().once(async (annotation, id) => {
-            if (!annotation) {
-                console.log(`Skipping null annotation for URL: ${normalizedUrl}, ID: ${id}`);
-                return;
-            }
+        const annotations = [];
+        await new Promise((resolve) => {
+            legacyNode.map().once((annotation, id) => {
+                if (!annotation) {
+                    console.log(`Skipping null annotation for URL: ${normalizedUrl}, ID: ${id}`);
+                    return;
+                }
+                annotations.push({ id, data: annotation });
+            });
+            setTimeout(resolve, 5000); // Increased delay to ensure all annotations are loaded
+        });
 
+        for (const { id, data: annotation } of annotations) {
             console.log(`Migrating annotation for URL: ${normalizedUrl}, ID: ${id}`);
 
             // Ensure isDeleted is set
@@ -100,13 +109,20 @@ async function migrateLegacyData() {
                 });
             });
 
-            // Migrate comments
-            legacyNode.get(id).get('comments').map().once(async (comment, commentId) => {
-                if (!comment) {
-                    console.log(`Skipping null comment for annotation ${id}, Comment ID: ${commentId}`);
-                    return;
-                }
+            // Fetch and migrate comments
+            const comments = [];
+            await new Promise((resolve) => {
+                legacyNode.get(id).get('comments').map().once((comment, commentId) => {
+                    if (!comment) {
+                        console.log(`Skipping null comment for annotation ${id}, Comment ID: ${commentId}`);
+                        return;
+                    }
+                    comments.push({ commentId, data: comment });
+                });
+                setTimeout(resolve, 5000); // Increased delay to ensure all comments are loaded
+            });
 
+            for (const { commentId, data: comment } of comments) {
                 console.log(`Migrating comment for annotation ${id}, Comment ID: ${commentId}`);
 
                 const commentData = {
@@ -125,22 +141,57 @@ async function migrateLegacyData() {
                         }
                     });
                 });
+            }
+        }
+
+        // Verify migration
+        const shardedAnnotations = [];
+        await new Promise((resolve) => {
+            targetNode.map().once((annotation, id) => {
+                if (annotation) {
+                    shardedAnnotations.push({ id, data: annotation });
+                }
+            });
+            setTimeout(resolve, 5000);
+        });
+
+        if (shardedAnnotations.length !== annotations.length) {
+            console.warn(`Migration incomplete for URL: ${normalizedUrl}. Expected ${annotations.length} annotations, found ${shardedAnnotations.length} in sharded node.`);
+        } else {
+            console.log(`Verified migration for URL: ${normalizedUrl}. All ${annotations.length} annotations migrated successfully.`);
+        }
+
+        // Tombstone legacy node after migration
+        console.log(`Tombstoning legacy node for URL: ${normalizedUrl}`);
+        await new Promise((resolve, reject) => {
+            legacyNode.put(null, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to tombstone legacy node for URL: ${normalizedUrl}, Error:`, ack.err);
+                    reject(ack.err);
+                } else {
+                    console.log(`Successfully tombstoned legacy node for URL: ${normalizedUrl}`);
+                    migratedUrls.add(normalizedUrl);
+                    resolve();
+                }
             });
         });
 
-        // Tombstone legacy node after migration
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for migration to complete
-        console.log(`Tombstoning legacy node for URL: ${normalizedUrl}`);
-        legacyNode.put(null, (ack) => {
-            if (ack.err) {
-                console.error(`Failed to tombstone legacy node for URL: ${normalizedUrl}, Error:`, ack.err);
-            } else {
-                console.log(`Successfully tombstoned legacy node for URL: ${normalizedUrl}`);
-            }
+        // Force replication to sharded node
+        await new Promise((resolve) => {
+            targetNode.put({ migrationMarker: Date.now() }, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to force replication for URL: ${normalizedUrl}, Error:`, ack.err);
+                } else {
+                    console.log(`Forced replication for sharded node at URL: ${normalizedUrl}`);
+                }
+                resolve();
+            });
         });
     });
 
-    console.log('Migration and tombstoning completed.');
+    // Wait for all migrations to complete
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    console.log('Migration and tombstoning completed for URLs:', Array.from(migratedUrls));
 }
 
 // Run migration

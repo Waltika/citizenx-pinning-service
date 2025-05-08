@@ -526,6 +526,10 @@ app.get('/api/annotations', async (req, res) => {
     }
 
     try {
+        // Clear profile cache to avoid stale data
+        profileCache.clear();
+        console.log('Cleared profile cache for request');
+
         const normalizedUrl = normalizeUrl(url);
         console.log('Normalized URL for query:', normalizedUrl);
 
@@ -600,36 +604,87 @@ app.get('/api/annotations', async (req, res) => {
             annotations.map(async (annotation) => {
                 const profile = await getProfileWithRetries(annotation.author);
 
-                const comments = await Promise.all(
+                const commentsData = await Promise.all(
                     annotationNodes.map((node) =>
                         new Promise((resolve) => {
                             const commentList = [];
+                            const commentIds = new Set();
+
                             node
                                 .get(annotation.id)
                                 .get('comments')
                                 .map()
-                                .once((comment) => {
-                                    if (comment) {
+                                .once((comment, commentId) => {
+                                    if (comment && !commentIds.has(commentId)) {
+                                        commentIds.add(commentId);
+                                        if (!('isDeleted' in comment)) {
+                                            console.warn(`Comment missing isDeleted field for annotation ${annotation.id}, Comment ID: ${commentId}`);
+                                            comment.isDeleted = false;
+                                        }
                                         if (!comment.isDeleted) {
+                                            console.log(`Including comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
                                             commentList.push({
-                                                id: comment.id,
+                                                id: commentId,
                                                 content: comment.content,
                                                 author: comment.author,
                                                 timestamp: comment.timestamp,
                                             });
                                         } else {
-                                            console.log(`Skipped deleted comment for annotation ${annotation.id}, comment ID: ${comment.id}`);
+                                            console.log(`Skipped deleted comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
                                         }
-                                    } else {
-                                        console.warn(`Encountered null or undefined comment for annotation ${annotation.id}`);
+                                    } else if (!comment) {
+                                        console.warn(`Encountered null or undefined comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
                                     }
                                 });
-                            setTimeout(() => resolve(commentList), 500);
+
+                            setTimeout(() => resolve(commentList), 5000); // Increased timeout
                         })
                     )
                 );
 
-                const flattenedComments = [...new Set(comments.flat())];
+                // Flatten and deduplicate comments
+                const flattenedComments = [];
+                const seenCommentIds = new Set();
+                for (const commentList of commentsData) {
+                    for (const comment of commentList) {
+                        if (!seenCommentIds.has(comment.id)) {
+                            seenCommentIds.add(comment.id);
+                            flattenedComments.push(comment);
+                        }
+                    }
+                }
+
+                // Consistency check across nodes
+                const commentStates = await Promise.all(
+                    annotationNodes.map((node) =>
+                        new Promise((resolve) => {
+                            const states = {};
+                            node
+                                .get(annotation.id)
+                                .get('comments')
+                                .map()
+                                .once((comment, commentId) => {
+                                    if (comment) {
+                                        states[commentId] = comment.isDeleted || false;
+                                    }
+                                });
+                            setTimeout(() => resolve(states), 5000);
+                        })
+                    )
+                );
+
+                // Check for inconsistencies
+                const firstNodeStates = commentStates[0];
+                for (let i = 1; i < commentStates.length; i++) {
+                    const nodeStates = commentStates[i];
+                    for (const commentId in firstNodeStates) {
+                        if (nodeStates[commentId] !== undefined && nodeStates[commentId] !== firstNodeStates[commentId]) {
+                            console.warn(
+                                `Consistency warning: Comment ${commentId} has inconsistent isDeleted state across nodes: Node 0: ${firstNodeStates[commentId]}, Node ${i}: ${nodeStates[commentId]}`
+                            );
+                        }
+                    }
+                }
 
                 const commentsWithAuthors = await Promise.all(
                     flattenedComments.map(async (comment) => {
@@ -649,6 +704,21 @@ app.get('/api/annotations', async (req, res) => {
                 };
             })
         );
+
+        // Force replication
+        const targetNode = subShard
+            ? gun.get(subShard).get(normalizedUrl)
+            : gun.get(domainShard).get(normalizedUrl);
+        await new Promise((resolve) => {
+            targetNode.put({ replicationMarker: Date.now() }, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to force replication for URL: ${normalizedUrl}, Error:`, ack.err);
+                } else {
+                    console.log(`Forced replication for sharded node at URL: ${normalizedUrl}`);
+                }
+                resolve();
+            });
+        });
 
         res.json({ annotations: annotationsWithDetails });
     } catch (error) {
