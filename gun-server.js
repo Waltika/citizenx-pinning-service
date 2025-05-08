@@ -738,12 +738,12 @@ app.get('/api/annotations', async (req, res) => {
                         new Promise((resolve) => {
                             const commentList = [];
                             const commentIds = new Set();
+                            let commentCount = 0;
                             let nodesProcessed = 0;
                             const totalNodes = annotationNodes.length;
 
                             const timeout = setTimeout(() => {
-                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 3000ms`);
-                                nodesProcessed = totalNodes;
+                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 3000ms with ${commentList.length} comments`);
                                 resolve(commentList);
                             }, 3000);
 
@@ -763,6 +763,7 @@ app.get('/api/annotations', async (req, res) => {
                                         timestamp: comment.timestamp,
                                         isDeleted: comment.isDeleted,
                                     });
+                                    commentCount++;
                                 } else if (!comment) {
                                     console.warn(`Encountered null or undefined comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
                                 } else {
@@ -770,19 +771,18 @@ app.get('/api/annotations', async (req, res) => {
                                 }
                                 nodesProcessed++;
                                 if (nodesProcessed === totalNodes) {
-                                    clearTimeout(timeout);
-                                    resolve(commentList);
+                                    console.log(`Finished fetching comments for node ${node._.get}: ${commentCount} comments found`);
                                 }
                             });
 
-                            // If no comments, resolve immediately
+                            // Extend the timeout to ensure all comments are fetched
                             setTimeout(() => {
-                                if (nodesProcessed === 0) {
+                                if (nodesProcessed === totalNodes && commentCount === 0) {
                                     console.log(`No comments found for annotation ${annotation.id} in node: ${node._.get}`);
                                     clearTimeout(timeout);
                                     resolve(commentList);
                                 }
-                            }, 100);
+                            }, 500); // Increased from 100ms to 500ms
                         })
                     )
                 );
