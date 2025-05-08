@@ -7,7 +7,7 @@ import path from 'path';
 import axios from 'axios';
 import RateLimit from 'express-rate-limit';
 import DOMPurify from 'dompurify';
-import { JSDOM } from 'jsdom';
+import {JSDOM} from 'jsdom';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
@@ -67,7 +67,7 @@ const server = http.createServer(app).listen(port);
 const dataDir = '/var/data/gun-data';
 try {
     if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
+        fs.mkdirSync(dataDir, {recursive: true});
         console.log('Created data directory:', dataDir);
     }
 } catch (error) {
@@ -122,10 +122,10 @@ function getShardKey(url) {
     if (highTrafficDomains.includes(domain)) {
         const hash = simpleHash(normalizedUrl);
         const subShardIndex = hash % 10; // 10 sub-shards
-        return { domainShard, subShard: `${domainShard}_shard_${subShardIndex}` };
+        return {domainShard, subShard: `${domainShard}_shard_${subShardIndex}`};
     }
 
-    return { domainShard };
+    return {domainShard};
 }
 
 // Simple hash function for sub-sharding
@@ -151,19 +151,19 @@ async function isAdmin(did) {
 // Middleware to verify deletion permissions
 const verifyDeletePermission = async (req, res, next) => {
     const requesterDid = req.headers['x-user-did'];
-    const { url, annotationId, commentId } = req.body;
+    const {url, annotationId, commentId} = req.body;
 
     if (!requesterDid) {
-        return res.status(401).json({ error: 'Unauthorized: Missing X-User-DID header' });
+        return res.status(401).json({error: 'Unauthorized: Missing X-User-DID header'});
     }
 
     if (!url || !annotationId) {
-        return res.status(400).json({ error: 'Missing required parameters' });
+        return res.status(400).json({error: 'Missing required parameters'});
     }
 
     try {
         const normalizedUrl = normalizeUrl(url);
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
+        const {domainShard, subShard} = getShardKey(normalizedUrl);
         const annotationNodes = [
             gun.get(domainShard).get(normalizedUrl),
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
@@ -181,7 +181,7 @@ const verifyDeletePermission = async (req, res, next) => {
         }
 
         if (!annotation) {
-            return res.status(404).json({ error: 'Annotation not found' });
+            return res.status(404).json({error: 'Annotation not found'});
         }
 
         let targetAuthor;
@@ -192,7 +192,7 @@ const verifyDeletePermission = async (req, res, next) => {
             });
 
             if (!comment) {
-                return res.status(404).json({ error: 'Comment not found' });
+                return res.status(404).json({error: 'Comment not found'});
             }
             targetAuthor = comment.author;
         } else {
@@ -202,13 +202,13 @@ const verifyDeletePermission = async (req, res, next) => {
 
         const isRequesterAdmin = await isAdmin(requesterDid);
         if (requesterDid !== targetAuthor && !isRequesterAdmin) {
-            return res.status(403).json({ error: 'Forbidden: You can only delete your own content or must be an admin' });
+            return res.status(403).json({error: 'Forbidden: You can only delete your own content or must be an admin'});
         }
 
         next();
     } catch (error) {
         console.error('Error verifying delete permission:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({error: 'Internal server error'});
     }
 };
 
@@ -382,7 +382,7 @@ async function getProfileWithRetries(did, retries = 5, delay = 100) {
     console.error('Failed to load profile for DID after retries:', did);
     const endTime = Date.now();
     console.log(`Profile fetch for DID: ${did} (failed) took ${endTime - startTime}ms`);
-    return { handle: 'Unknown' };
+    return {handle: 'Unknown'};
 }
 
 // Debug endpoint to inspect sharded node data
@@ -391,17 +391,17 @@ app.get('/api/debug/annotations', async (req, res) => {
     const annotationId = req.query.annotationId;
 
     if (!url) {
-        return res.status(400).json({ error: 'Missing url parameter' });
+        return res.status(400).json({error: 'Missing url parameter'});
     }
     if (!annotationId) {
-        return res.status(400).json({ error: 'Missing annotationId parameter' });
+        return res.status(400).json({error: 'Missing annotationId parameter'});
     }
 
     try {
         const normalizedUrl = normalizeUrl(url);
         console.log('Debug - Normalized URL:', normalizedUrl);
 
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
+        const {domainShard, subShard} = getShardKey(normalizedUrl);
         const annotationNodes = [
             gun.get(domainShard).get(normalizedUrl),
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
@@ -565,16 +565,16 @@ app.get('/api/debug/annotations', async (req, res) => {
         });
     } catch (error) {
         console.error('Error debugging annotations:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({error: 'Internal server error'});
     }
 });
 
 // New endpoint for URL shortening
 app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
-    const { url } = req.body;
+    const {url} = req.body;
 
     if (!url) {
-        return res.status(400).json({ error: 'Missing url parameter' });
+        return res.status(400).json({error: 'Missing url parameter'});
     }
 
     try {
@@ -594,10 +594,10 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
 
         const shortUrl = response.data.shortURL;
         console.log(`Successfully shortened URL: ${url} to ${shortUrl}`);
-        res.json({ shortUrl });
+        res.json({shortUrl});
     } catch (error) {
         console.error('Error shortening URL:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Failed to shorten URL' });
+        res.status(500).json({error: 'Failed to shorten URL'});
     }
 });
 
@@ -613,7 +613,7 @@ app.get('/api/annotations', async (req, res) => {
         console.log(`[Timing] Request failed: Missing url parameter`);
         const endTime = Date.now();
         console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
-        return res.status(400).json({ error: 'Missing url parameter' });
+        return res.status(400).json({error: 'Missing url parameter'});
     }
 
     try {
@@ -626,7 +626,7 @@ app.get('/api/annotations', async (req, res) => {
         const normalizedUrl = normalizeUrl(url);
         console.log('Normalized URL for query:', normalizedUrl);
 
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
+        const {domainShard, subShard} = getShardKey(normalizedUrl);
         console.log(`Querying shards for URL: ${normalizedUrl}, domainShard: ${domainShard}, subShard: ${subShard}`);
         const annotationNodes = [
             gun.get('annotations').get(normalizedUrl), // Include legacy node
@@ -720,7 +720,7 @@ app.get('/api/annotations', async (req, res) => {
             console.log(`No valid annotations found for URL: ${normalizedUrl} after ${maxRetries} attempts`);
             const endTime = Date.now();
             console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
-            return res.status(404).json({ error: 'No annotations found for this URL' });
+            return res.status(404).json({error: 'No annotations found for this URL'});
         }
 
         const annotationsWithDetails = await Promise.all(
@@ -889,7 +889,7 @@ app.get('/api/annotations', async (req, res) => {
         await Promise.all(
             annotationNodes.map(node =>
                 new Promise((resolve) => {
-                    node.put({ replicationMarker: Date.now() }, (ack) => {
+                    node.put({replicationMarker: Date.now()}, (ack) => {
                         if (ack.err) {
                             console.error(`Failed to force replication for node: ${node._.get}, URL: ${normalizedUrl}, Error:`, ack.err);
                         } else {
@@ -906,29 +906,29 @@ app.get('/api/annotations', async (req, res) => {
         const endTime = Date.now();
         console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
 
-        res.json({ annotations: annotationsWithDetails });
+        res.json({annotations: annotationsWithDetails});
     } catch (error) {
         console.error('Error fetching annotations:', error);
         const endTime = Date.now();
         console.log(`[Timing] Total request time (with error): ${endTime - totalStartTime}ms`);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({error: 'Internal server error'});
     }
 });
 
 // Endpoint to delete annotations
 app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req, res) => {
-    const { url, annotationId } = req.body;
+    const {url, annotationId} = req.body;
 
     try {
         const normalizedUrl = normalizeUrl(url);
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
+        const {domainShard, subShard} = getShardKey(normalizedUrl);
         const targetNode = subShard
             ? gun.get(subShard).get(normalizedUrl)
             : gun.get(domainShard).get(normalizedUrl);
 
         // Mark as deleted
         await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).put({ isDeleted: true }, (ack) => {
+            targetNode.get(annotationId).put({isDeleted: true}, (ack) => {
                 if (ack.err) {
                     console.error(
                         `Failed to mark annotation as deleted for URL: ${normalizedUrl}, ID: ${annotationId}, Error:`,
@@ -944,31 +944,31 @@ app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req
             });
         });
 
-        res.json({ success: true });
+        res.json({success: true});
     } catch (error) {
         console.error('Error deleting annotation:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({error: 'Internal server error'});
     }
 });
 
 // Endpoint to delete comments
 app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, res) => {
-    const { url, annotationId, commentId } = req.body;
+    const {url, annotationId, commentId} = req.body;
 
     if (!commentId) {
-        return res.status(400).json({ error: 'Missing commentId parameter' });
+        return res.status(400).json({error: 'Missing commentId parameter'});
     }
 
     try {
         const normalizedUrl = normalizeUrl(url);
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
+        const {domainShard, subShard} = getShardKey(normalizedUrl);
         const targetNode = subShard
             ? gun.get(subShard).get(normalizedUrl)
             : gun.get(domainShard).get(normalizedUrl);
 
         // Mark comment as deleted
         await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).get('comments').get(commentId).put({ isDeleted: true }, (ack) => {
+            targetNode.get(annotationId).get('comments').get(commentId).put({isDeleted: true}, (ack) => {
                 if (ack.err) {
                     console.error(
                         `Failed to mark comment as deleted for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}, Error:`,
@@ -984,13 +984,12 @@ app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, r
             });
         });
 
-        res.json({ success: true });
+        res.json({success: true});
     } catch (error) {
         console.error('Error deleting comment:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({error: 'Internal server error'});
     }
 });
-
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
 console.log(`Initial peers: ${initialPeers.length > 0 ? initialPeers.join(', ') : 'none'}`);
