@@ -840,24 +840,30 @@ app.get('/api/annotations', async (req, res) => {
                         )
                     );
 
-                    // Resolve inconsistencies: Exclude a comment if it's deleted in any node
+                    // Resolve inconsistencies: Include a comment if it's not deleted in any node
                     resolvedComments = [];
                     const resolvedCommentIds = new Set();
                     for (const comment of flattenedComments) {
                         if (resolvedCommentIds.has(comment.id)) continue;
                         resolvedCommentIds.add(comment.id);
 
-                        let isDeleted = false;
-                        for (const states of commentStates) {
-                            if (states[comment.id] === true) {
-                                isDeleted = true;
+                        let isDeleted = true;
+                        const statesList = commentStates.map(states => states[comment.id]);
+                        console.log(`Consistency check for comment ${comment.id}: States across nodes:`, statesList);
+
+                        // Include the comment if it's not deleted in at least one node
+                        for (const state of statesList) {
+                            if (state === false) {
+                                isDeleted = false;
                                 break;
                             }
                         }
+
                         if (!isDeleted) {
+                            console.log(`Including comment ${comment.id} as it is not deleted in at least one node`);
                             resolvedComments.push(comment);
                         } else {
-                            console.log(`Excluded inconsistent deleted comment for annotation ${annotation.id}, Comment ID: ${comment.id}`);
+                            console.log(`Excluding comment ${comment.id} as it is marked as deleted in all nodes`);
                         }
                     }
 
