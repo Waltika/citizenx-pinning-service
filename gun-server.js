@@ -208,7 +208,7 @@ const verifyDeletePermission = async (req, res, next) => {
         next();
     } catch (error) {
         console.error('Error verifying delete permission:', error);
-        res.status(200).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 
@@ -332,7 +332,7 @@ setInterval(() => {
 // In-memory cache for profiles
 const profileCache = new Map();
 
-async function getProfileWithRetries(did, retries = 5, delay = 200) {
+async function getProfileWithRetries(did, retries = 5, delay = 100) {
     const startTime = Date.now();
     if (profileCache.has(did)) {
         const endTime = Date.now();
@@ -431,10 +431,10 @@ app.get('/api/debug/annotations', async (req, res) => {
                             const totalNodes = annotationNodes.length;
 
                             const timeout = setTimeout(() => {
-                                console.log(`Debug fetch comments for annotation ${annotationId} timed out after 3000ms`);
+                                console.log(`Debug fetch comments for annotation ${annotationId} timed out after 500ms`);
                                 nodesProcessed = totalNodes;
                                 resolve(comments);
-                            }, 3000);
+                            }, 500);
 
                             node.get(annotationId).get('comments').map().once((comment, commentId) => {
                                 if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
@@ -506,10 +506,10 @@ app.get('/api/debug/annotations', async (req, res) => {
                     const totalNodes = 1;
 
                     const timeout = setTimeout(() => {
-                        console.log(`Debug fetch comments from legacy node for annotation ${annotationId} timed out after 3000ms`);
+                        console.log(`<|control194|> fetch comments from legacy node for annotation ${annotationId} timed out after 500ms`);
                         nodesProcessed = totalNodes;
                         resolve(comments);
-                    }, 3000);
+                    }, 500);
 
                     legacyNode.get(annotationId).get('comments').map().once((comment, commentId) => {
                         if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
@@ -565,7 +565,7 @@ app.get('/api/debug/annotations', async (req, res) => {
         });
     } catch (error) {
         console.error('Error debugging annotations:', error);
-        res.status(200).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -597,7 +597,7 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
         res.json({ shortUrl });
     } catch (error) {
         console.error('Error shortening URL:', error.response?.data || error.message);
-        res.status(200).json({ error: 'Failed to shorten URL' });
+        res.status(500).json({ error: 'Failed to shorten URL' });
     }
 });
 
@@ -651,10 +651,10 @@ app.get('/api/annotations', async (req, res) => {
                         const totalNodes = annotationNodes.length;
 
                         const timeout = setTimeout(() => {
-                            console.log(`Fetch annotations attempt ${attempt}/${maxRetries} timed out after 3000ms`);
+                            console.log(`Fetch annotations attempt ${attempt}/${maxRetries} timed out after 500ms`);
                             nodesProcessed = totalNodes;
                             resolve(annotationList);
-                        }, 3000);
+                        }, 500);
 
                         node.map().once((annotation, key) => {
                             // Skip non-annotation nodes
@@ -711,7 +711,7 @@ app.get('/api/annotations', async (req, res) => {
             console.log(
                 `Retrying annotation fetch for URL: ${normalizedUrl}, attempt ${attempt}/${maxRetries}`
             );
-            await new Promise((resolve) => setTimeout(resolve, 200));
+            await new Promise((resolve) => setTimeout(resolve, 100));
         }
         const fetchAnnotationsEnd = Date.now();
         console.log(`[Timing] Total fetch annotations time: ${fetchAnnotationsEnd - fetchAnnotationsStart}ms`);
@@ -743,9 +743,9 @@ app.get('/api/annotations', async (req, res) => {
                             const totalNodes = annotationNodes.length;
 
                             const timeout = setTimeout(() => {
-                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 3000ms with ${commentList.length} comments`);
+                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 500ms with ${commentList.length} comments`);
                                 resolve(commentList);
-                            }, 3000);
+                            }, 500);
 
                             console.log(`Fetching comments for annotation ${annotation.id} from node: ${node._.get}`);
                             node.get(annotation.id).get('comments').map().once((comment, commentId) => {
@@ -783,7 +783,7 @@ app.get('/api/annotations', async (req, res) => {
                                     clearTimeout(timeout);
                                     resolve(commentList);
                                 }
-                            }, 200); // Increased from 100ms to 200ms
+                            }, 100); // Increased from 100ms to 200ms
                         })
                     )
                 );
@@ -911,7 +911,7 @@ app.get('/api/annotations', async (req, res) => {
         console.error('Error fetching annotations:', error);
         const endTime = Date.now();
         console.log(`[Timing] Total request time (with error): ${endTime - totalStartTime}ms`);
-        res.status(200).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -947,7 +947,7 @@ app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting annotation:', error);
-        res.status(200).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -987,7 +987,7 @@ app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, r
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting comment:', error);
-        res.status(200).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
