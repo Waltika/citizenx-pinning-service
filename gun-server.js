@@ -165,12 +165,9 @@ const verifyDeletePermission = async (req, res, next) => {
         const normalizedUrl = normalizeUrl(url);
         const { domainShard, subShard } = getShardKey(normalizedUrl);
         const annotationNodes = [
-            gun.get('annotations').get(normalizedUrl),
             gun.get(domainShard).get(normalizedUrl),
+            ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
         ];
-        if (subShard) {
-            annotationNodes.push(gun.get(subShard).get(normalizedUrl));
-        }
 
         let annotation;
         for (const node of annotationNodes) {
@@ -191,7 +188,7 @@ const verifyDeletePermission = async (req, res, next) => {
         if (commentId) {
             // Verify comment deletion
             const comment = await new Promise((resolve) => {
-                annotationNodes[1].get(annotationId).get('comments').get(commentId).once((data) => resolve(data));
+                annotationNodes[0].get(annotationId).get('comments').get(commentId).once((data) => resolve(data));
             });
 
             if (!comment) {
@@ -231,30 +228,6 @@ const cleanupNullEntries = () => {
         }
     });
 };
-
-// Periodically clean up tombstones in annotations
-setInterval(() => {
-    const now = Date.now();
-    console.log('Running annotations cleanup...');
-    gun.get('annotations').map().once((data, fossilizedUrl) => {
-        if (!fossilizedUrl) return;
-        const annotations = gun.get('annotations').get(fossilizedUrl);
-        annotations.map().once((annotation, id) => {
-            if (annotation === null) {
-                console.log(`Found tombstone for URL: ${fossilizedUrl}, ID: ${id}`);
-            } else if (annotation?.isDeleted) {
-                console.log(`Found marked-for-deletion annotation for URL: ${fossilizedUrl}, ID: ${id}, tombstoning...`);
-                annotations.get(id).put(null, (ack) => {
-                    if (ack.err) {
-                        console.error(`Failed to tombstone marked-for-deletion annotation for URL: ${fossilizedUrl}, ID: ${id}, Error:`, ack.err);
-                    } else {
-                        console.log(`Successfully tombstoned marked-for-deletion annotation for URL: ${fossilizedUrl}, ID: ${id}`);
-                    }
-                });
-            }
-        });
-    });
-}, 60 * 60 * 1000); // Run every hour
 
 // Ensure the server's entry in knownPeers on startup
 const ensureServerPeer = () => {
@@ -448,12 +421,9 @@ app.get('/api/annotations', async (req, res) => {
 
         const { domainShard, subShard } = getShardKey(normalizedUrl);
         const annotationNodes = [
-            gun.get('annotations').get(normalizedUrl), // Legacy node
             gun.get(domainShard).get(normalizedUrl), // Primary shard
+            ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []), // Sub-shard
         ];
-        if (subShard) {
-            annotationNodes.push(gun.get(subShard).get(normalizedUrl)); // Sub-shard
-        }
 
         const maxRetries = 3;
         let annotations = [];
@@ -465,20 +435,28 @@ app.get('/api/annotations', async (req, res) => {
                     new Promise((resolve) => {
                         const annotationList = [];
                         node.map().once((annotation) => {
-                            if (
-                                annotation &&
-                                !loadedAnnotations.has(annotation.id) &&
-                                !annotation.isDeleted
-                            ) {
-                                loadedAnnotations.add(annotation.id);
-                                annotationList.push({
-                                    id: annotation.id,
-                                    url: annotation.url,
-                                    content: annotation.content,
-                                    author: annotation.author,
-                                    timestamp: annotation.timestamp,
-                                });
+                            if (annotation === null) {
+                                console.log(`Skipped null annotation for URL: ${normalizedUrl}`);
+                                return;
                             }
+                            if (
+                                !annotation ||
+                                loadedAnnotations.has(annotation.id) ||
+                                annotation.isDeleted
+                            ) {
+                                if (annotation?.isDeleted) {
+                                    console.log(`Skipped deleted annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
+                                }
+                                return;
+                            }
+                            loadedAnnotations.add(annotation.id);
+                            annotationList.push({
+                                id: annotation.id,
+                                url: annotation.url,
+                                content: annotation.content,
+                                author: annotation.author,
+                                timestamp: annotation.timestamp,
+                            });
                         });
                         setTimeout(() => {
                             console.log(
@@ -486,7 +464,7 @@ app.get('/api/annotations', async (req, res) => {
                                 annotationList
                             );
                             resolve(annotationList);
-                        }, 1000);
+                        }, 2000);
                     })
                 )
             );
@@ -592,24 +570,6 @@ app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req
                 } else {
                     console.log(
                         `Successfully marked annotation as deleted for URL: ${normalizedUrl}, ID: ${annotationId}`
-                    );
-                    resolve();
-                }
-            });
-        });
-
-        // Tombstone the annotation
-        await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).put(null, (ack) => {
-                if (ack.err) {
-                    console.error(
-                        `Failed to tombstone annotation for URL: ${normalizedUrl}, ID: ${annotationId}, Error:`,
-                        ack.err
-                    );
-                    reject(new Error(ack.err));
-                } else {
-                    console.log(
-                        `Successfully tombstoned annotation for URL: ${normalizedUrl}, ID: ${annotationId}`
                     );
                     resolve();
                 }
