@@ -426,8 +426,19 @@ app.get('/api/debug/annotations', async (req, res) => {
                             };
 
                             const comments = [];
+                            const commentIds = new Set();
+                            let nodesProcessed = 0;
+                            const totalNodes = 1; // Single node for this query
+
+                            const timeout = setTimeout(() => {
+                                console.log(`Debug fetch comments for annotation ${annotationId} timed out after 3000ms`);
+                                nodesProcessed = totalNodes;
+                                resolve(comments);
+                            }, 3000);
+
                             node.get(annotationId).get('comments').map().once((comment, commentId) => {
-                                if (comment) {
+                                if (comment && !commentIds.has(commentId)) {
+                                    commentIds.add(commentId);
                                     comments.push({
                                         id: commentId,
                                         content: comment.content,
@@ -436,15 +447,41 @@ app.get('/api/debug/annotations', async (req, res) => {
                                         isDeleted: comment.isDeleted || false,
                                     });
                                 }
+                                nodesProcessed++;
+                                if (nodesProcessed === totalNodes) {
+                                    clearTimeout(timeout);
+                                    resolve(comments);
+                                }
                             });
-                            setTimeout(() => {
-                                annotationData.comments = comments;
-                                resolve(annotationData);
-                            }, 5000);
+
+                            // If no comments, resolve immediately
+                            if (nodesProcessed === 0) {
+                                setTimeout(() => {
+                                    if (nodesProcessed === 0) {
+                                        clearTimeout(timeout);
+                                        resolve(comments);
+                                    }
+                                }, 100);
+                            }
                         } else {
                             resolve(null);
                         }
                     });
+                }).then((comments) => {
+                    if (comments) {
+                        return {
+                            annotation: {
+                                id: annotationId,
+                                url: normalizedUrl,
+                                content: comments.content,
+                                author: comments.author,
+                                timestamp: comments.timestamp,
+                                isDeleted: comments.isDeleted || false,
+                            },
+                            comments,
+                        };
+                    }
+                    return null;
                 })
             )
         );
@@ -464,8 +501,19 @@ app.get('/api/debug/annotations', async (req, res) => {
                     };
 
                     const comments = [];
+                    const commentIds = new Set();
+                    let nodesProcessed = 0;
+                    const totalNodes = 1; // Single node for this query
+
+                    const timeout = setTimeout(() => {
+                        console.log(`Debug fetch comments from legacy node for annotation ${annotationId} timed out after 3000ms`);
+                        nodesProcessed = totalNodes;
+                        resolve(comments);
+                    }, 3000);
+
                     legacyNode.get(annotationId).get('comments').map().once((comment, commentId) => {
-                        if (comment) {
+                        if (comment && !commentIds.has(commentId)) {
+                            commentIds.add(commentId);
                             comments.push({
                                 id: commentId,
                                 content: comment.content,
@@ -474,20 +522,46 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 isDeleted: comment.isDeleted || false,
                             });
                         }
+                        nodesProcessed++;
+                        if (nodesProcessed === totalNodes) {
+                            clearTimeout(timeout);
+                            resolve(comments);
+                        }
                     });
-                    setTimeout(() => {
-                        annotationData.comments = comments;
-                        resolve(annotationData);
-                    }, 5000);
+
+                    // If no comments, resolve immediately
+                    if (nodesProcessed === 0) {
+                        setTimeout(() => {
+                            if (nodesProcessed === 0) {
+                                clearTimeout(timeout);
+                                resolve(comments);
+                            }
+                        }, 100);
+                    }
                 } else {
                     resolve(null);
                 }
             });
+        }).then((comments) => {
+            if (comments) {
+                return {
+                    annotation: {
+                        id: annotationId,
+                        url: normalizedUrl,
+                        content: comments.content,
+                        author: comments.author,
+                        timestamp: comments.timestamp,
+                        isDeleted: comments.isDeleted || false,
+                    },
+                    comments,
+                };
+            }
+            return 'Tombstoned or empty';
         });
 
         res.json({
             shardedData: shardedData.filter(data => data !== null),
-            legacyData: legacyData || 'Tombstoned or empty',
+            legacyData: legacyData,
         });
     } catch (error) {
         console.error('Error debugging annotations:', error);
@@ -558,7 +632,7 @@ app.get('/api/annotations', async (req, res) => {
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []), // Sub-shard
         ];
 
-        const maxRetries = 3;
+        const maxRetries = 2; // Reduced from 3 to 2
         let annotations = [];
 
         // Step 1: Fetch annotations
@@ -566,10 +640,20 @@ app.get('/api/annotations', async (req, res) => {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             const attemptStartTime = Date.now();
             const loadedAnnotations = new Set();
+
             annotations = await Promise.all(
                 annotationNodes.map((node) =>
                     new Promise((resolve) => {
                         const annotationList = [];
+                        let nodesProcessed = 0;
+                        const totalNodes = annotationNodes.length;
+
+                        const timeout = setTimeout(() => {
+                            console.log(`Fetch annotations attempt ${attempt}/${maxRetries} timed out after 3000ms`);
+                            nodesProcessed = totalNodes;
+                            resolve(annotationList);
+                        }, 3000);
+
                         node.map().once((annotation, key) => {
                             // Skip non-annotation nodes
                             if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
@@ -593,14 +677,21 @@ app.get('/api/annotations', async (req, res) => {
                                 timestamp: annotation.timestamp,
                             });
                             console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
+
+                            nodesProcessed++;
+                            if (nodesProcessed === totalNodes) {
+                                clearTimeout(timeout);
+                                resolve(annotationList);
+                            }
                         });
+
+                        // If no annotations, resolve immediately
                         setTimeout(() => {
-                            console.log(
-                                `Attempt ${attempt}: Annotations found from node:`,
-                                annotationList
-                            );
-                            resolve(annotationList);
-                        }, 5000);
+                            if (nodesProcessed === 0) {
+                                clearTimeout(timeout);
+                                resolve(annotationList);
+                            }
+                        }, 100);
                     })
                 )
             );
@@ -645,35 +736,50 @@ app.get('/api/annotations', async (req, res) => {
                         new Promise((resolve) => {
                             const commentList = [];
                             const commentIds = new Set();
+                            let nodesProcessed = 0;
+                            const totalNodes = 1; // Single node for this query
 
-                            node
-                                .get(annotation.id)
-                                .get('comments')
-                                .map()
-                                .once((comment, commentId) => {
-                                    if (comment && !commentIds.has(commentId)) {
-                                        commentIds.add(commentId);
-                                        if (!('isDeleted' in comment)) {
-                                            console.warn(`Comment missing isDeleted field for annotation ${annotation.id}, Comment ID: ${commentId}`);
-                                            comment.isDeleted = false;
-                                        }
-                                        if (!comment.isDeleted) {
-                                            console.log(`Including comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
-                                            commentList.push({
-                                                id: commentId,
-                                                content: comment.content,
-                                                author: comment.author,
-                                                timestamp: comment.timestamp,
-                                            });
-                                        } else {
-                                            console.log(`Skipped deleted comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
-                                        }
-                                    } else if (!comment) {
-                                        console.warn(`Encountered null or undefined comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
+                            const timeout = setTimeout(() => {
+                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 1000ms`);
+                                nodesProcessed = totalNodes;
+                                resolve(commentList);
+                            }, 1000);
+
+                            node.get(annotation.id).get('comments').map().once((comment, commentId) => {
+                                if (comment && !commentIds.has(commentId)) {
+                                    commentIds.add(commentId);
+                                    if (!('isDeleted' in comment)) {
+                                        console.warn(`Comment missing isDeleted field for annotation ${annotation.id}, Comment ID: ${commentId}`);
+                                        comment.isDeleted = false;
                                     }
-                                });
+                                    if (!comment.isDeleted) {
+                                        console.log(`Including comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
+                                        commentList.push({
+                                            id: commentId,
+                                            content: comment.content,
+                                            author: comment.author,
+                                            timestamp: comment.timestamp,
+                                        });
+                                    } else {
+                                        console.log(`Skipped deleted comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
+                                    }
+                                } else if (!comment) {
+                                    console.warn(`Encountered null or undefined comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
+                                }
+                                nodesProcessed++;
+                                if (nodesProcessed === totalNodes) {
+                                    clearTimeout(timeout);
+                                    resolve(commentList);
+                                }
+                            });
 
-                            setTimeout(() => resolve(commentList), 5000);
+                            // If no comments, resolve immediately
+                            setTimeout(() => {
+                                if (nodesProcessed === 0) {
+                                    clearTimeout(timeout);
+                                    resolve(commentList);
+                                }
+                            }, 100);
                         })
                     )
                 );
@@ -692,40 +798,62 @@ app.get('/api/annotations', async (req, res) => {
                     }
                 }
 
-                // Step 4: Consistency check
-                const consistencyCheckStart = Date.now();
-                const commentStates = await Promise.all(
-                    annotationNodes.map((node) =>
-                        new Promise((resolve) => {
-                            const states = {};
-                            node
-                                .get(annotation.id)
-                                .get('comments')
-                                .map()
-                                .once((comment, commentId) => {
+                // Step 4: Consistency check (only if there are comments to process)
+                let commentStates = [];
+                if (flattenedComments.length > 0) {
+                    const consistencyCheckStart = Date.now();
+                    commentStates = await Promise.all(
+                        annotationNodes.map((node) =>
+                            new Promise((resolve) => {
+                                const states = {};
+                                let nodesProcessed = 0;
+                                const totalNodes = 1; // Single node for this query
+
+                                const timeout = setTimeout(() => {
+                                    console.log(`Consistency check for annotation ${annotation.id} timed out after 1000ms`);
+                                    nodesProcessed = totalNodes;
+                                    resolve(states);
+                                }, 1000);
+
+                                node.get(annotation.id).get('comments').map().once((comment, commentId) => {
                                     if (comment) {
                                         states[commentId] = comment.isDeleted || false;
                                     }
+                                    nodesProcessed++;
+                                    if (nodesProcessed === totalNodes) {
+                                        clearTimeout(timeout);
+                                        resolve(states);
+                                    }
                                 });
-                            setTimeout(() => resolve(states), 5000);
-                        })
-                    )
-                );
 
-                // Check for inconsistencies
-                const firstNodeStates = commentStates[0];
-                for (let i = 1; i < commentStates.length; i++) {
-                    const nodeStates = commentStates[i];
-                    for (const commentId in firstNodeStates) {
-                        if (nodeStates[commentId] !== undefined && nodeStates[commentId] !== firstNodeStates[commentId]) {
-                            console.warn(
-                                `Consistency warning: Comment ${commentId} has inconsistent isDeleted state across nodes: Node 0: ${firstNodeStates[commentId]}, Node ${i}: ${nodeStates[commentId]}`
-                            );
+                                // If no comments, resolve immediately
+                                setTimeout(() => {
+                                    if (nodesProcessed === 0) {
+                                        clearTimeout(timeout);
+                                        resolve(states);
+                                    }
+                                }, 100);
+                            })
+                        )
+                    );
+
+                    // Check for inconsistencies
+                    const firstNodeStates = commentStates[0];
+                    for (let i = 1; i < commentStates.length; i++) {
+                        const nodeStates = commentStates[i];
+                        for (const commentId in firstNodeStates) {
+                            if (nodeStates[commentId] !== undefined && nodeStates[commentId] !== firstNodeStates[commentId]) {
+                                console.warn(
+                                    `Consistency warning: Comment ${commentId} has inconsistent isDeleted state across nodes: Node 0: ${firstNodeStates[commentId]}, Node ${i}: ${nodeStates[commentId]}`
+                                );
+                            }
                         }
                     }
+                    const consistencyCheckEnd = Date.now();
+                    console.log(`[Timing] Consistency check for annotation ${annotation.id} took ${consistencyCheckEnd - consistencyCheckStart}ms`);
+                } else {
+                    console.log(`[Timing] Skipped consistency check for annotation ${annotation.id} (no comments to process)`);
                 }
-                const consistencyCheckEnd = Date.now();
-                console.log(`[Timing] Consistency check for annotation ${annotation.id} took ${consistencyCheckEnd - consistencyCheckStart}ms`);
 
                 // Step 5: Fetch profiles for comment authors
                 const fetchCommentProfilesStart = Date.now();
