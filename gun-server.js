@@ -428,7 +428,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                             const comments = [];
                             const commentIds = new Set();
                             let nodesProcessed = 0;
-                            const totalNodes = 1; // Single node for this query
+                            const totalNodes = annotationNodes.length;
 
                             const timeout = setTimeout(() => {
                                 console.log(`Debug fetch comments for annotation ${annotationId} timed out after 3000ms`);
@@ -437,7 +437,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                             }, 3000);
 
                             node.get(annotationId).get('comments').map().once((comment, commentId) => {
-                                if (comment && !commentIds.has(commentId)) {
+                                if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
                                     commentIds.add(commentId);
                                     comments.push({
                                         id: commentId,
@@ -503,7 +503,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                     const comments = [];
                     const commentIds = new Set();
                     let nodesProcessed = 0;
-                    const totalNodes = 1; // Single node for this query
+                    const totalNodes = 1;
 
                     const timeout = setTimeout(() => {
                         console.log(`Debug fetch comments from legacy node for annotation ${annotationId} timed out after 3000ms`);
@@ -512,7 +512,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                     }, 3000);
 
                     legacyNode.get(annotationId).get('comments').map().once((comment, commentId) => {
-                        if (comment && !commentIds.has(commentId)) {
+                        if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
                             commentIds.add(commentId);
                             comments.push({
                                 id: commentId,
@@ -627,6 +627,7 @@ app.get('/api/annotations', async (req, res) => {
         console.log('Normalized URL for query:', normalizedUrl);
 
         const { domainShard, subShard } = getShardKey(normalizedUrl);
+        console.log(`Querying shards for URL: ${normalizedUrl}, domainShard: ${domainShard}, subShard: ${subShard}`);
         const annotationNodes = [
             gun.get(domainShard).get(normalizedUrl), // Primary shard
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []), // Sub-shard
@@ -709,7 +710,7 @@ app.get('/api/annotations', async (req, res) => {
             console.log(
                 `Retrying annotation fetch for URL: ${normalizedUrl}, attempt ${attempt}/${maxRetries}`
             );
-            await new Promise((resolve) => setTimeout(resolve, 500)); // Reduced retry delay from 1000ms to 500ms
+            await new Promise((resolve) => setTimeout(resolve, 500));
         }
         const fetchAnnotationsEnd = Date.now();
         console.log(`[Timing] Total fetch annotations time: ${fetchAnnotationsEnd - fetchAnnotationsStart}ms`);
@@ -737,34 +738,32 @@ app.get('/api/annotations', async (req, res) => {
                             const commentList = [];
                             const commentIds = new Set();
                             let nodesProcessed = 0;
-                            const totalNodes = 1; // Single node for this query
+                            const totalNodes = annotationNodes.length;
 
                             const timeout = setTimeout(() => {
-                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 1000ms`);
+                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 3000ms`);
                                 nodesProcessed = totalNodes;
                                 resolve(commentList);
-                            }, 1000);
+                            }, 3000);
 
                             node.get(annotation.id).get('comments').map().once((comment, commentId) => {
-                                if (comment && !commentIds.has(commentId)) {
+                                if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
                                     commentIds.add(commentId);
                                     if (!('isDeleted' in comment)) {
                                         console.warn(`Comment missing isDeleted field for annotation ${annotation.id}, Comment ID: ${commentId}`);
                                         comment.isDeleted = false;
                                     }
-                                    if (!comment.isDeleted) {
-                                        console.log(`Including comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
-                                        commentList.push({
-                                            id: commentId,
-                                            content: comment.content,
-                                            author: comment.author,
-                                            timestamp: comment.timestamp,
-                                        });
-                                    } else {
-                                        console.log(`Skipped deleted comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
-                                    }
+                                    commentList.push({
+                                        id: commentId,
+                                        content: comment.content,
+                                        author: comment.author,
+                                        timestamp: comment.timestamp,
+                                        isDeleted: comment.isDeleted,
+                                    });
                                 } else if (!comment) {
                                     console.warn(`Encountered null or undefined comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
+                                } else {
+                                    console.warn(`Skipping invalid comment for annotation ${annotation.id}, Comment ID: ${commentId}`, comment);
                                 }
                                 nodesProcessed++;
                                 if (nodesProcessed === totalNodes) {
@@ -799,15 +798,15 @@ app.get('/api/annotations', async (req, res) => {
                 }
 
                 // Step 4: Consistency check (only if there are comments to process)
-                let commentStates = [];
+                let resolvedComments = [];
                 if (flattenedComments.length > 0) {
                     const consistencyCheckStart = Date.now();
-                    commentStates = await Promise.all(
+                    const commentStates = await Promise.all(
                         annotationNodes.map((node) =>
                             new Promise((resolve) => {
                                 const states = {};
                                 let nodesProcessed = 0;
-                                const totalNodes = 1; // Single node for this query
+                                const totalNodes = annotationNodes.length;
 
                                 const timeout = setTimeout(() => {
                                     console.log(`Consistency check for annotation ${annotation.id} timed out after 1000ms`);
@@ -837,7 +836,28 @@ app.get('/api/annotations', async (req, res) => {
                         )
                     );
 
-                    // Check for inconsistencies
+                    // Resolve inconsistencies: Exclude a comment if it's deleted in any node
+                    resolvedComments = [];
+                    const resolvedCommentIds = new Set();
+                    for (const comment of flattenedComments) {
+                        if (resolvedCommentIds.has(comment.id)) continue;
+                        resolvedCommentIds.add(comment.id);
+
+                        let isDeleted = false;
+                        for (const states of commentStates) {
+                            if (states[comment.id] === true) {
+                                isDeleted = true;
+                                break;
+                            }
+                        }
+                        if (!isDeleted) {
+                            resolvedComments.push(comment);
+                        } else {
+                            console.log(`Excluded inconsistent deleted comment for annotation ${annotation.id}, Comment ID: ${comment.id}`);
+                        }
+                    }
+
+                    // Check for inconsistencies (for logging purposes)
                     const firstNodeStates = commentStates[0];
                     for (let i = 1; i < commentStates.length; i++) {
                         const nodeStates = commentStates[i];
@@ -858,7 +878,7 @@ app.get('/api/annotations', async (req, res) => {
                 // Step 5: Fetch profiles for comment authors
                 const fetchCommentProfilesStart = Date.now();
                 const commentsWithAuthors = await Promise.all(
-                    flattenedComments.map(async (comment) => {
+                    resolvedComments.map(async (comment) => {
                         const commentProfile = await getProfileWithRetries(comment.author);
                         return {
                             ...comment,
@@ -878,21 +898,22 @@ app.get('/api/annotations', async (req, res) => {
             })
         );
 
-        // Step 6: Write replication marker
+        // Step 6: Write replication marker to all nodes
         const replicationStart = Date.now();
-        const targetNode = subShard
-            ? gun.get(subShard).get(normalizedUrl)
-            : gun.get(domainShard).get(normalizedUrl);
-        await new Promise((resolve) => {
-            targetNode.put({ replicationMarker: Date.now() }, (ack) => {
-                if (ack.err) {
-                    console.error(`Failed to force replication for URL: ${normalizedUrl}, Error:`, ack.err);
-                } else {
-                    console.log(`Forced replication for sharded node at URL: ${normalizedUrl}`);
-                }
-                resolve();
-            });
-        });
+        await Promise.all(
+            annotationNodes.map(node =>
+                new Promise((resolve) => {
+                    node.put({ replicationMarker: Date.now() }, (ack) => {
+                        if (ack.err) {
+                            console.error(`Failed to force replication for node: ${node._.get}, URL: ${normalizedUrl}, Error:`, ack.err);
+                        } else {
+                            console.log(`Forced replication for node: ${node._.get}, URL: ${normalizedUrl}`);
+                        }
+                        resolve();
+                    });
+                })
+            )
+        );
         const replicationEnd = Date.now();
         console.log(`[Timing] Write replication marker took ${replicationEnd - replicationStart}ms`);
 
