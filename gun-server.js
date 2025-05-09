@@ -7,7 +7,7 @@ import axios from 'axios';
 import RateLimit from 'express-rate-limit';
 import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
-import * as cheerio from 'cheerio'; // Corrected import for cheerio
+import * as cheerio from 'cheerio';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
@@ -83,6 +83,7 @@ const gun = Gun({
     peers: initialPeers,
     file: dataDir,
     radisk: true,
+    batch: false, // Disable batching to force immediate writes to disk
 });
 
 const peerId = `${publicUrl}-bootstrap`;
@@ -628,6 +629,35 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
     }
 });
 
+// Middleware to force persistence after write operations
+const forcePersistence = async (req, res, next) => {
+    const originalJson = res.json.bind(res);
+    res.json = async (body) => {
+        if (req.method === 'POST' || req.method === 'DELETE') {
+            console.log('Forcing persistence after write operation:', req.method, req.url);
+            try {
+                await new Promise((resolve, reject) => {
+                    gun._.radisk.flush((err) => {
+                        if (err) {
+                            console.error('Failed to flush data to disk:', err);
+                            reject(new Error('Persistence flush failed'));
+                        } else {
+                            console.log('Data successfully flushed to disk');
+                            resolve();
+                        }
+                    });
+                });
+            } catch (error) {
+                console.error('Persistence error:', error);
+            }
+        }
+        return originalJson(body);
+    };
+    next();
+};
+
+app.use(forcePersistence);
+
 app.get('/api/annotations', async (req, res) => {
     const totalStartTime = Date.now();
     console.log(`[Timing] Starting /api/annotations request at ${new Date().toISOString()}`);
@@ -715,6 +745,10 @@ app.get('/api/annotations', async (req, res) => {
             console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
             return res.status(404).json({ error: 'No annotations found for this URL' });
         }
+
+        // Sort annotations by timestamp (newest first)
+        annotations.sort((a, b) => b.timestamp - a.timestamp);
+        console.log(`Sorted annotations by timestamp (newest first), Total annotations: ${annotations.length}`);
 
         const annotationsWithDetails = await Promise.all(
             annotations.map(async (annotation) => {
