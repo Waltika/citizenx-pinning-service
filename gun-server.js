@@ -3,11 +3,10 @@ import http from 'http';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
-import path from 'path';
 import axios from 'axios';
 import RateLimit from 'express-rate-limit';
 import DOMPurify from 'dompurify';
-import {JSDOM} from 'jsdom';
+import { JSDOM } from 'jsdom';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
@@ -15,16 +14,14 @@ const initialPeers = [];
 
 const app = express();
 
-// Setup DOMPurify with JSDOM
 const window = new JSDOM('').window;
 const purify = DOMPurify(window);
 
-// Enhanced CORS configuration with production extension ID
 const corsOptions = {
     origin: [
         'https://citizenx.app',
-        'chrome-extension://mbmlbbmhjhcmmpbieofegoefkhnbjmbj', // Production Chrome extension ID
-        'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap', // Development Chrome extension ID
+        'chrome-extension://mbmlbbmhjhcmmpbieofegoefkhnbjmbj',
+        'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap',
     ],
     methods: ['GET', 'POST', 'DELETE'],
     allowedHeaders: ['Content-Type', 'X-User-DID'],
@@ -32,19 +29,16 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Rate limiting configuration
 const limiter = RateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each DID to 100 requests per windowMs
-    keyGenerator: (req) => req.headers['x-user-did'] || req.ip, // Use DID if available, else IP
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    keyGenerator: (req) => req.headers['x-user-did'] || req.ip,
     message: 'Too many requests, please try again later.',
 });
 app.use(limiter);
 
-// Middleware to parse JSON bodies
 app.use(express.json());
 
-// Sanitize input middleware
 const sanitizeInput = (req, res, next) => {
     if (req.body) {
         const sanitizeObject = (obj) => {
@@ -63,11 +57,10 @@ const sanitizeInput = (req, res, next) => {
 
 const server = http.createServer(app).listen(port);
 
-// Ensure the /var/data/gun-data directory exists
 const dataDir = '/var/data/gun-data';
 try {
     if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, {recursive: true});
+        fs.mkdirSync(dataDir, { recursive: true });
         console.log('Created data directory:', dataDir);
     }
 } catch (error) {
@@ -75,14 +68,13 @@ try {
     console.warn('Data persistence may not work without a persistent disk.');
 }
 
-// Read the Short.io API key from /var/data/short.key
 let shortIoApiKey = '';
 try {
     shortIoApiKey = fs.readFileSync('/var/data/short.key', 'utf8').trim();
     console.log('Successfully read Short.io API key from /var/data/short.key');
 } catch (error) {
     console.error('Failed to read Short.io API key from /var/data/short.key:', error);
-    process.exit(1); // Exit if the API key cannot be read
+    process.exit(1);
 }
 
 const gun = Gun({
@@ -92,10 +84,8 @@ const gun = Gun({
     radisk: true,
 });
 
-// Use a static peerId to persist across server restarts
 const peerId = `${publicUrl}-bootstrap`;
 
-// Helper function to normalize URLs
 function normalizeUrl(url) {
     let cleanUrl = url.replace(/^(https?:\/\/)+/, 'https://');
     cleanUrl = cleanUrl.replace(/\/+$/, '');
@@ -110,36 +100,32 @@ function normalizeUrl(url) {
     return urlObj.toString();
 }
 
-// Helper function to determine shard key
 function getShardKey(url) {
     const normalizedUrl = normalizeUrl(url);
     const urlObj = new URL(normalizedUrl);
     const domain = urlObj.hostname.replace(/\./g, '_');
     const domainShard = `annotations_${domain}`;
 
-    // Sub-sharding for high-traffic domains
     const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
     if (highTrafficDomains.includes(domain)) {
         const hash = simpleHash(normalizedUrl);
-        const subShardIndex = hash % 10; // 10 sub-shards
-        return {domainShard, subShard: `${domainShard}_shard_${subShardIndex}`};
+        const subShardIndex = hash % 10;
+        return { domainShard, subShard: `${domainShard}_shard_${subShardIndex}` };
     }
 
-    return {domainShard};
+    return { domainShard };
 }
 
-// Simple hash function for sub-sharding
 function simpleHash(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
         hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32-bit integer
+        hash = hash & hash;
     }
     return Math.abs(hash);
 }
 
-// Helper function to check if a user is an admin
 async function isAdmin(did) {
     return new Promise((resolve) => {
         gun.get('admins').get(did).once((data) => {
@@ -148,22 +134,21 @@ async function isAdmin(did) {
     });
 }
 
-// Middleware to verify deletion permissions
 const verifyDeletePermission = async (req, res, next) => {
     const requesterDid = req.headers['x-user-did'];
-    const {url, annotationId, commentId} = req.body;
+    const { url, annotationId, commentId } = req.body;
 
     if (!requesterDid) {
-        return res.status(401).json({error: 'Unauthorized: Missing X-User-DID header'});
+        return res.status(401).json({ error: 'Unauthorized: Missing X-User-DID header' });
     }
 
     if (!url || !annotationId) {
-        return res.status(400).json({error: 'Missing required parameters'});
+        return res.status(400).json({ error: 'Missing required parameters' });
     }
 
     try {
         const normalizedUrl = normalizeUrl(url);
-        const {domainShard, subShard} = getShardKey(normalizedUrl);
+        const { domainShard, subShard } = getShardKey(normalizedUrl);
         const annotationNodes = [
             gun.get(domainShard).get(normalizedUrl),
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
@@ -181,38 +166,35 @@ const verifyDeletePermission = async (req, res, next) => {
         }
 
         if (!annotation) {
-            return res.status(404).json({error: 'Annotation not found'});
+            return res.status(404).json({ error: 'Annotation not found' });
         }
 
         let targetAuthor;
         if (commentId) {
-            // Verify comment deletion
             const comment = await new Promise((resolve) => {
                 annotationNodes[0].get(annotationId).get('comments').get(commentId).once((data) => resolve(data));
             });
 
             if (!comment) {
-                return res.status(404).json({error: 'Comment not found'});
+                return res.status(404).json({ error: 'Comment not found' });
             }
             targetAuthor = comment.author;
         } else {
-            // Verify annotation deletion
             targetAuthor = annotation.author;
         }
 
         const isRequesterAdmin = await isAdmin(requesterDid);
         if (requesterDid !== targetAuthor && !isRequesterAdmin) {
-            return res.status(403).json({error: 'Forbidden: You can only delete your own content or must be an admin'});
+            return res.status(403).json({ error: 'Forbidden: You can only delete your own content or must be an admin' });
         }
 
         next();
     } catch (error) {
         console.error('Error verifying delete permission:', error);
-        res.status(500).json({error: 'Internal server error'});
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 
-// One-time cleanup of null entries on startup
 const cleanupNullEntries = () => {
     console.log('Performing one-time cleanup of null entries in knownPeers...');
     gun.get('knownPeers').map().once((peer, id) => {
@@ -229,7 +211,6 @@ const cleanupNullEntries = () => {
     });
 };
 
-// Ensure the server's entry in knownPeers on startup
 const ensureServerPeer = () => {
     console.log('Ensuring server peer in knownPeers...');
     gun.get('knownPeers').get(peerId).once((data) => {
@@ -254,11 +235,9 @@ const ensureServerPeer = () => {
     });
 };
 
-// Run cleanup and peer registration on startup
 cleanupNullEntries();
 ensureServerPeer();
 
-// Periodically update server peer timestamp
 setInterval(() => {
     const now = Date.now();
     console.log('Updating server peer timestamp...');
@@ -275,12 +254,10 @@ setInterval(() => {
     });
 }, 5 * 60 * 1000);
 
-// Throttle peer cleanup to reduce unnecessary updates
 let lastCleanup = 0;
-const cleanupInterval = 2 * 60 * 1000; // Reduced to 2 minutes
-const cleanupThrottle = 1 * 60 * 1000; // Throttle to 1 minute between cleanups
+const cleanupInterval = 2 * 60 * 1000;
+const cleanupThrottle = 1 * 60 * 1000;
 
-// Track removed peers to avoid redundant logging
 const removedPeers = new Set();
 
 setInterval(() => {
@@ -293,7 +270,7 @@ setInterval(() => {
     console.log('Running peer cleanup...');
     gun.get('knownPeers').map().once((peer, id) => {
         if (removedPeers.has(id)) {
-            return; // Skip already processed peers
+            return;
         }
 
         if (!peer || !peer.url || !peer.timestamp) {
@@ -322,14 +299,12 @@ setInterval(() => {
         }
     });
 
-    // Clear the removedPeers set after a longer period to allow for new entries
     setTimeout(() => {
         removedPeers.clear();
         console.log('Cleared removedPeers set');
-    }, 24 * 60 * 60 * 1000); // Clear every 24 hours
+    }, 24 * 60 * 60 * 1000);
 }, cleanupInterval);
 
-// In-memory cache for profiles
 const profileCache = new Map();
 
 async function getProfileWithRetries(did, retries = 5, delay = 100) {
@@ -382,26 +357,78 @@ async function getProfileWithRetries(did, retries = 5, delay = 100) {
     console.error('Failed to load profile for DID after retries:', did);
     const endTime = Date.now();
     console.log(`Profile fetch for DID: ${did} (failed) took ${endTime - startTime}ms`);
-    return {handle: 'Unknown'};
+    return { handle: 'Unknown' };
 }
 
-// Debug endpoint to inspect sharded node data
+async function fetchPageMetadata(url) {
+    try {
+        const response = await axios.get(url, { timeout: 5000 });
+        const window = new JSDOM('').window;
+        const purify = DOMPurify(window);
+        const cleanHtml = purify.sanitize(response.data);
+        const $ = cheerio.load(cleanHtml);
+
+        const metadata = {
+            title: $('title').text() || 'Untitled Page',
+            favicon: $('link[rel="icon"]').attr('href') || $('link[rel="shortcut icon"]').attr('href') || `${new URL(url).origin}/favicon.ico`,
+            ogTitle: $('meta[property="og:title"]').attr('content'),
+            ogDescription: $('meta[property="og:description"]').attr('content'),
+            ogImage: $('meta[property="og:image"]').attr('content'),
+            twitterTitle: $('meta[name="twitter:title"]').attr('content'),
+            twitterDescription: $('meta[name="twitter:description"]').attr('content'),
+            twitterImage: $('meta[name="twitter:image"]').attr('content'),
+        };
+
+        if (metadata.favicon && !metadata.favicon.startsWith('http')) {
+            metadata.favicon = new URL(metadata.favicon, url).href;
+        }
+
+        return metadata;
+    } catch (error) {
+        console.error(`Failed to fetch metadata for ${url}:`, error.message);
+        return {
+            title: 'Untitled Page',
+            favicon: null,
+            ogTitle: null,
+            ogDescription: null,
+            ogImage: null,
+            twitterTitle: null,
+            twitterDescription: null,
+            twitterImage: null,
+        };
+    }
+}
+
+app.get('/api/page-metadata', async (req, res) => {
+    const { url } = req.query;
+    if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'Invalid URL' });
+    }
+
+    try {
+        const metadata = await fetchPageMetadata(url);
+        res.json(metadata);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch metadata' });
+    }
+});
+
 app.get('/api/debug/annotations', async (req, res) => {
     const url = req.query.url;
     const annotationId = req.query.annotationId;
 
     if (!url) {
-        return res.status(400).json({error: 'Missing url parameter'});
+        return res.status(400).json({ error: 'Missing url parameter' });
     }
     if (!annotationId) {
-        return res.status(400).json({error: 'Missing annotationId parameter'});
+        return res.status(400).json({ error: 'Missing annotationId parameter' });
     }
 
     try {
         const normalizedUrl = normalizeUrl(url);
         console.log('Debug - Normalized URL:', normalizedUrl);
 
-        const {domainShard, subShard} = getShardKey(normalizedUrl);
+        const { domainShard, subShard } = getShardKey(normalizedUrl);
         const annotationNodes = [
             gun.get(domainShard).get(normalizedUrl),
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
@@ -409,7 +436,6 @@ app.get('/api/debug/annotations', async (req, res) => {
 
         const legacyNode = gun.get('annotations').get(normalizedUrl);
 
-        // Fetch from sharded nodes
         const shardedData = await Promise.all(
             annotationNodes.map((node) =>
                 new Promise((resolve) => {
@@ -423,6 +449,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 author: annotation.author,
                                 timestamp: annotation.timestamp,
                                 isDeleted: annotation.isDeleted || false,
+                                screenshot: annotation.screenshot,
                             };
 
                             const comments = [];
@@ -454,7 +481,6 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 }
                             });
 
-                            // If no comments, resolve immediately
                             if (nodesProcessed === 0) {
                                 setTimeout(() => {
                                     if (nodesProcessed === 0) {
@@ -477,6 +503,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 author: comments.author,
                                 timestamp: comments.timestamp,
                                 isDeleted: comments.isDeleted || false,
+                                screenshot: comments.screenshot,
                             },
                             comments,
                         };
@@ -486,7 +513,6 @@ app.get('/api/debug/annotations', async (req, res) => {
             )
         );
 
-        // Fetch from legacy node (for debugging)
         const legacyData = await new Promise((resolve) => {
             const annotationData = {};
             legacyNode.get(annotationId).once((annotation) => {
@@ -498,6 +524,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                         author: annotation.author,
                         timestamp: annotation.timestamp,
                         isDeleted: annotation.isDeleted || false,
+                        screenshot: annotation.screenshot,
                     };
 
                     const comments = [];
@@ -506,7 +533,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                     const totalNodes = 1;
 
                     const timeout = setTimeout(() => {
-                        console.log(`<|control194|> fetch comments from legacy node for annotation ${annotationId} timed out after 500ms`);
+                        console.log(`Debug fetch comments from legacy node for annotation ${annotationId} timed out after 500ms`);
                         nodesProcessed = totalNodes;
                         resolve(comments);
                     }, 500);
@@ -529,7 +556,6 @@ app.get('/api/debug/annotations', async (req, res) => {
                         }
                     });
 
-                    // If no comments, resolve immediately
                     if (nodesProcessed === 0) {
                         setTimeout(() => {
                             if (nodesProcessed === 0) {
@@ -552,6 +578,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                         author: comments.author,
                         timestamp: comments.timestamp,
                         isDeleted: comments.isDeleted || false,
+                        screenshot: comments.screenshot,
                     },
                     comments,
                 };
@@ -565,16 +592,15 @@ app.get('/api/debug/annotations', async (req, res) => {
         });
     } catch (error) {
         console.error('Error debugging annotations:', error);
-        res.status(500).json({error: 'Internal server error'});
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-// New endpoint for URL shortening
 app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
-    const {url} = req.body;
+    const { url } = req.body;
 
     if (!url) {
-        return res.status(400).json({error: 'Missing url parameter'});
+        return res.status(400).json({ error: 'Missing url parameter' });
     }
 
     try {
@@ -594,14 +620,13 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
 
         const shortUrl = response.data.shortURL;
         console.log(`Successfully shortened URL: ${url} to ${shortUrl}`);
-        res.json({shortUrl});
+        res.json({ shortUrl });
     } catch (error) {
         console.error('Error shortening URL:', error.response?.data || error.message);
-        res.status(500).json({error: 'Failed to shorten URL'});
+        res.status(500).json({ error: 'Failed to shorten URL' });
     }
 });
 
-// Endpoint to fetch annotations
 app.get('/api/annotations', async (req, res) => {
     const totalStartTime = Date.now();
     console.log(`[Timing] Starting /api/annotations request at ${new Date().toISOString()}`);
@@ -613,11 +638,10 @@ app.get('/api/annotations', async (req, res) => {
         console.log(`[Timing] Request failed: Missing url parameter`);
         const endTime = Date.now();
         console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
-        return res.status(400).json({error: 'Missing url parameter'});
+        return res.status(400).json({ error: 'Missing url parameter' });
     }
 
     try {
-        // Clear profile cache to avoid stale data
         const cacheClearStart = Date.now();
         profileCache.clear();
         const cacheClearEnd = Date.now();
@@ -626,18 +650,17 @@ app.get('/api/annotations', async (req, res) => {
         const normalizedUrl = normalizeUrl(url);
         console.log('Normalized URL for query:', normalizedUrl);
 
-        const {domainShard, subShard} = getShardKey(normalizedUrl);
+        const { domainShard, subShard } = getShardKey(normalizedUrl);
         console.log(`Querying shards for URL: ${normalizedUrl}, domainShard: ${domainShard}, subShard: ${subShard}`);
         const annotationNodes = [
-            gun.get('annotations').get(normalizedUrl), // Include legacy node
-            gun.get(domainShard).get(normalizedUrl), // Primary shard
-            ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []), // Sub-shard
+            gun.get('annotations').get(normalizedUrl),
+            gun.get(domainShard).get(normalizedUrl),
+            ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
         ];
 
         const maxRetries = 2;
         let annotations = [];
 
-        // Step 1: Fetch annotations
         const fetchAnnotationsStart = Date.now();
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             const attemptStartTime = Date.now();
@@ -657,7 +680,6 @@ app.get('/api/annotations', async (req, res) => {
                         }, 500);
 
                         node.map().once((annotation, key) => {
-                            // Skip non-annotation nodes
                             if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
                                 console.log(`Skipped non-annotation node for URL: ${normalizedUrl}, Key: ${key}, Data:`, annotation);
                                 return;
@@ -677,6 +699,7 @@ app.get('/api/annotations', async (req, res) => {
                                 content: annotation.content,
                                 author: annotation.author,
                                 timestamp: annotation.timestamp,
+                                screenshot: annotation.screenshot,
                             });
                             console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
 
@@ -687,7 +710,6 @@ app.get('/api/annotations', async (req, res) => {
                             }
                         });
 
-                        // If no annotations, resolve immediately
                         setTimeout(() => {
                             if (nodesProcessed === 0) {
                                 clearTimeout(timeout);
@@ -701,7 +723,6 @@ app.get('/api/annotations', async (req, res) => {
             const attemptEndTime = Date.now();
             console.log(`[Timing] Fetch annotations attempt ${attempt}/${maxRetries} took ${attemptEndTime - attemptStartTime}ms`);
 
-            // Flatten and deduplicate annotations
             annotations = [...new Set(annotations.flat())];
 
             if (annotations.length > 0 || attempt === maxRetries) {
@@ -720,18 +741,16 @@ app.get('/api/annotations', async (req, res) => {
             console.log(`No valid annotations found for URL: ${normalizedUrl} after ${maxRetries} attempts`);
             const endTime = Date.now();
             console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
-            return res.status(404).json({error: 'No annotations found for this URL'});
+            return res.status(404).json({ error: 'No annotations found for this URL' });
         }
 
         const annotationsWithDetails = await Promise.all(
             annotations.map(async (annotation) => {
-                // Step 2: Fetch profile for annotation author
                 const profileStartTime = Date.now();
                 const profile = await getProfileWithRetries(annotation.author);
                 const profileEndTime = Date.now();
                 console.log(`[Timing] Profile fetch for annotation author ${annotation.author} took ${profileEndTime - profileStartTime}ms`);
 
-                // Step 3: Fetch comments
                 const fetchCommentsStart = Date.now();
                 const commentsData = await Promise.all(
                     annotationNodes.map((node, nodeIndex) =>
@@ -762,7 +781,7 @@ app.get('/api/annotations', async (req, res) => {
                                         author: comment.author,
                                         timestamp: comment.timestamp,
                                         isDeleted: comment.isDeleted,
-                                        nodeIndex, // Track which node this comment came from
+                                        nodeIndex,
                                     });
                                     commentCount++;
                                 } else if (!comment) {
@@ -776,21 +795,19 @@ app.get('/api/annotations', async (req, res) => {
                                 }
                             });
 
-                            // Extend the timeout to ensure all comments are fetched
                             setTimeout(() => {
                                 if (nodesProcessed === totalNodes && commentCount === 0) {
                                     console.log(`No comments found for annotation ${annotation.id} in node: ${node._.get}`);
                                     clearTimeout(timeout);
                                     resolve(commentList);
                                 }
-                            }, 100); // Increased from 100ms to 200ms
+                            }, 200);
                         })
                     )
                 );
                 const fetchCommentsEnd = Date.now();
                 console.log(`[Timing] Fetch comments for annotation ${annotation.id} took ${fetchCommentsEnd - fetchCommentsStart}ms`);
 
-                // Flatten and deduplicate comments
                 const flattenedComments = [];
                 const seenCommentIds = new Set();
                 for (const commentList of commentsData) {
@@ -802,12 +819,10 @@ app.get('/api/annotations', async (req, res) => {
                     }
                 }
 
-                // Step 4: Consistency check (using fetched data)
                 let resolvedComments = [];
                 if (flattenedComments.length > 0) {
                     const consistencyCheckStart = Date.now();
 
-                    // Group comments by ID to check for inconsistencies across nodes
                     const commentsById = new Map();
                     for (const comment of flattenedComments) {
                         if (!commentsById.has(comment.id)) {
@@ -816,7 +831,6 @@ app.get('/api/annotations', async (req, res) => {
                         commentsById.get(comment.id).push(comment);
                     }
 
-                    // Resolve inconsistencies: Include a comment if it's not deleted in at least one node
                     resolvedComments = [];
                     const resolvedCommentIds = new Set();
                     for (const [commentId, commentInstances] of commentsById.entries()) {
@@ -827,7 +841,6 @@ app.get('/api/annotations', async (req, res) => {
                         const statesList = commentInstances.map(c => c.isDeleted);
                         console.log(`Consistency check for comment ${commentId}: States across nodes:`, statesList);
 
-                        // Include the comment if it's not deleted in at least one node
                         for (const state of statesList) {
                             if (state === false) {
                                 isDeleted = false;
@@ -835,7 +848,6 @@ app.get('/api/annotations', async (req, res) => {
                             }
                         }
 
-                        // Check for inconsistencies (for logging purposes)
                         const firstState = statesList[0];
                         for (let i = 1; i < statesList.length; i++) {
                             if (statesList[i] !== firstState) {
@@ -848,7 +860,6 @@ app.get('/api/annotations', async (req, res) => {
 
                         if (!isDeleted) {
                             console.log(`Including comment ${commentId} as it is not deleted in at least one node`);
-                            // Use the first instance of the comment (arbitrarily chosen)
                             resolvedComments.push(commentInstances[0]);
                         } else {
                             console.log(`Excluding comment ${commentId} as it is marked as deleted in all nodes`);
@@ -861,7 +872,6 @@ app.get('/api/annotations', async (req, res) => {
                     console.log(`[Timing] Skipped consistency check for annotation ${annotation.id} (no comments to process)`);
                 }
 
-                // Step 5: Fetch profiles for comment authors
                 const fetchCommentProfilesStart = Date.now();
                 const commentsWithAuthors = await Promise.all(
                     resolvedComments.map(async (comment) => {
@@ -875,21 +885,29 @@ app.get('/api/annotations', async (req, res) => {
                 const fetchCommentProfilesEnd = Date.now();
                 console.log(`[Timing] Fetch comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
 
+                let metadata;
+                if (!annotation.screenshot) {
+                    const metadataStart = Date.now();
+                    metadata = await fetchPageMetadata(normalizedUrl);
+                    const metadataEnd = Date.now();
+                    console.log(`[Timing] Fetch metadata for URL ${normalizedUrl} took ${metadataEnd - metadataStart}ms`);
+                }
+
                 return {
                     ...annotation,
                     authorHandle: profile.handle,
                     authorProfilePicture: profile.profilePicture,
                     comments: commentsWithAuthors,
+                    metadata,
                 };
             })
         );
 
-        // Step 6: Write replication marker to all nodes
         const replicationStart = Date.now();
         await Promise.all(
             annotationNodes.map(node =>
                 new Promise((resolve) => {
-                    node.put({replicationMarker: Date.now()}, (ack) => {
+                    node.put({ replicationMarker: Date.now() }, (ack) => {
                         if (ack.err) {
                             console.error(`Failed to force replication for node: ${node._.get}, URL: ${normalizedUrl}, Error:`, ack.err);
                         } else {
@@ -906,29 +924,27 @@ app.get('/api/annotations', async (req, res) => {
         const endTime = Date.now();
         console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
 
-        res.json({annotations: annotationsWithDetails});
+        res.json({ annotations: annotationsWithDetails });
     } catch (error) {
         console.error('Error fetching annotations:', error);
         const endTime = Date.now();
         console.log(`[Timing] Total request time (with error): ${endTime - totalStartTime}ms`);
-        res.status(500).json({error: 'Internal server error'});
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-// Endpoint to delete annotations
 app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req, res) => {
-    const {url, annotationId} = req.body;
+    const { url, annotationId } = req.body;
 
     try {
         const normalizedUrl = normalizeUrl(url);
-        const {domainShard, subShard} = getShardKey(normalizedUrl);
+        const { domainShard, subShard } = getShardKey(normalizedUrl);
         const targetNode = subShard
             ? gun.get(subShard).get(normalizedUrl)
             : gun.get(domainShard).get(normalizedUrl);
 
-        // Mark as deleted
         await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).put({isDeleted: true}, (ack) => {
+            targetNode.get(annotationId).put({ isDeleted: true }, (ack) => {
                 if (ack.err) {
                     console.error(
                         `Failed to mark annotation as deleted for URL: ${normalizedUrl}, ID: ${annotationId}, Error:`,
@@ -944,31 +960,29 @@ app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req
             });
         });
 
-        res.json({success: true});
+        res.json({ success: true });
     } catch (error) {
         console.error('Error deleting annotation:', error);
-        res.status(500).json({error: 'Internal server error'});
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-// Endpoint to delete comments
 app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, res) => {
-    const {url, annotationId, commentId} = req.body;
+    const { url, annotationId, commentId } = req.body;
 
     if (!commentId) {
-        return res.status(400).json({error: 'Missing commentId parameter'});
+        return res.status(400).json({ error: 'Missing commentId parameter' });
     }
 
     try {
         const normalizedUrl = normalizeUrl(url);
-        const {domainShard, subShard} = getShardKey(normalizedUrl);
+        const { domainShard, subShard } = getShardKey(normalizedUrl);
         const targetNode = subShard
             ? gun.get(subShard).get(normalizedUrl)
             : gun.get(domainShard).get(normalizedUrl);
 
-        // Mark comment as deleted
         await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).get('comments').get(commentId).put({isDeleted: true}, (ack) => {
+            targetNode.get(annotationId).get('comments').get(commentId).put({ isDeleted: true }, (ack) => {
                 if (ack.err) {
                     console.error(
                         `Failed to mark comment as deleted for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}, Error:`,
@@ -984,12 +998,13 @@ app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, r
             });
         });
 
-        res.json({success: true});
+        res.json({ success: true });
     } catch (error) {
         console.error('Error deleting comment:', error);
-        res.status(500).json({error: 'Internal server error'});
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
+
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
 console.log(`Initial peers: ${initialPeers.length > 0 ? initialPeers.join(', ') : 'none'}`);
