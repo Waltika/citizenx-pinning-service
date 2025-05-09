@@ -7,6 +7,7 @@ import axios from 'axios';
 import RateLimit from 'express-rate-limit';
 import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
+import * as cheerio from 'cheerio'; // Corrected import for cheerio
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
@@ -658,87 +659,58 @@ app.get('/api/annotations', async (req, res) => {
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
         ];
 
-        const maxRetries = 2;
-        let annotations = [];
-
         const fetchAnnotationsStart = Date.now();
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            const attemptStartTime = Date.now();
-            const loadedAnnotations = new Set();
+        const annotations = [];
+        const loadedAnnotations = new Set();
+        const maxWaitTime = 3000; // Maximum time to wait for annotations (3 seconds)
 
-            annotations = await Promise.all(
-                annotationNodes.map((node) =>
-                    new Promise((resolve) => {
-                        const annotationList = [];
-                        let nodesProcessed = 0;
-                        const totalNodes = annotationNodes.length;
+        const fetchPromise = new Promise((resolve) => {
+            // Use map().on() to listen for real-time updates
+            const onAnnotation = (annotation, key) => {
+                if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
+                    console.log(`Skipped non-annotation node for URL: ${normalizedUrl}, Key: ${key}, Data:`, annotation);
+                    return;
+                }
+                if (loadedAnnotations.has(annotation.id)) {
+                    console.log(`Skipped duplicate annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
+                    return;
+                }
+                if (annotation.isDeleted) {
+                    console.log(`Skipped deleted annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
+                    return;
+                }
+                loadedAnnotations.add(annotation.id);
+                annotations.push({
+                    id: annotation.id,
+                    url: annotation.url,
+                    content: annotation.content,
+                    author: annotation.author,
+                    timestamp: annotation.timestamp,
+                    screenshot: annotation.screenshot,
+                });
+                console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
+            };
 
-                        const timeout = setTimeout(() => {
-                            console.log(`Fetch annotations attempt ${attempt}/${maxRetries} timed out after 500ms`);
-                            nodesProcessed = totalNodes;
-                            resolve(annotationList);
-                        }, 500);
+            // Attach listeners to all nodes
+            annotationNodes.forEach(node => {
+                node.map().on(onAnnotation);
+            });
 
-                        node.map().once((annotation, key) => {
-                            if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
-                                console.log(`Skipped non-annotation node for URL: ${normalizedUrl}, Key: ${key}, Data:`, annotation);
-                                return;
-                            }
-                            if (loadedAnnotations.has(annotation.id)) {
-                                console.log(`Skipped duplicate annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
-                                return;
-                            }
-                            if (annotation.isDeleted) {
-                                console.log(`Skipped deleted annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
-                                return;
-                            }
-                            loadedAnnotations.add(annotation.id);
-                            annotationList.push({
-                                id: annotation.id,
-                                url: annotation.url,
-                                content: annotation.content,
-                                author: annotation.author,
-                                timestamp: annotation.timestamp,
-                                screenshot: annotation.screenshot,
-                            });
-                            console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
+            // Wait for annotations to load or timeout
+            setTimeout(() => {
+                // Cleanup listeners
+                annotationNodes.forEach(node => node.map().off());
+                console.log(`Finished fetching annotations for URL: ${normalizedUrl}, Total annotations: ${annotations.length}`);
+                resolve(annotations);
+            }, maxWaitTime);
+        });
 
-                            nodesProcessed++;
-                            if (nodesProcessed === totalNodes) {
-                                clearTimeout(timeout);
-                                resolve(annotationList);
-                            }
-                        });
-
-                        setTimeout(() => {
-                            if (nodesProcessed === 0) {
-                                clearTimeout(timeout);
-                                resolve(annotationList);
-                            }
-                        }, 100);
-                    })
-                )
-            );
-
-            const attemptEndTime = Date.now();
-            console.log(`[Timing] Fetch annotations attempt ${attempt}/${maxRetries} took ${attemptEndTime - attemptStartTime}ms`);
-
-            annotations = [...new Set(annotations.flat())];
-
-            if (annotations.length > 0 || attempt === maxRetries) {
-                break;
-            }
-
-            console.log(
-                `Retrying annotation fetch for URL: ${normalizedUrl}, attempt ${attempt}/${maxRetries}`
-            );
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        }
+        await fetchPromise;
         const fetchAnnotationsEnd = Date.now();
         console.log(`[Timing] Total fetch annotations time: ${fetchAnnotationsEnd - fetchAnnotationsStart}ms`);
 
         if (!annotations || annotations.length === 0) {
-            console.log(`No valid annotations found for URL: ${normalizedUrl} after ${maxRetries} attempts`);
+            console.log(`No valid annotations found for URL: ${normalizedUrl} after waiting ${maxWaitTime}ms`);
             const endTime = Date.now();
             console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
             return res.status(404).json({ error: 'No annotations found for this URL' });
