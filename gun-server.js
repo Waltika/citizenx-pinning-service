@@ -789,8 +789,9 @@ app.get('/api/annotations', async (req, res) => {
     try {
         const cacheClearStart = Date.now();
         profileCache.clear();
+        annotationCache.clear(); // Clear annotation cache to prevent cross-request interference
         const cacheClearEnd = Date.now();
-        console.log(`[Timing] Cleared profile cache in ${cacheClearEnd - cacheClearStart}ms`);
+        console.log(`[Timing] Cleared profile and annotation caches in ${cacheClearEnd - cacheClearStart}ms`);
 
         const normalizedUrl = normalizeUrl(url);
         console.log('Normalized URL for query:', normalizedUrl);
@@ -806,7 +807,7 @@ app.get('/api/annotations', async (req, res) => {
         const fetchAnnotationsStart = Date.now();
         const annotations = [];
         const loadedAnnotations = new Set();
-        const maxWaitTime = 3000;
+        const maxWaitTime = 5000; // Increased to 5000ms to allow more time for data retrieval
 
         const fetchPromise = new Promise((resolve) => {
             const onAnnotation = (annotation, key) => {
@@ -815,6 +816,7 @@ app.get('/api/annotations', async (req, res) => {
                     return;
                 }
                 const cacheKey = `${normalizedUrl}:${annotation.id}`;
+                console.log(`Processing annotation for URL: ${normalizedUrl}, ID: ${annotation.id}, CacheKey: ${cacheKey}`); // Debug logging
                 if (loadedAnnotations.has(annotation.id) || annotationCache.has(cacheKey)) {
                     console.log(`Skipped duplicate annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
                     return;
