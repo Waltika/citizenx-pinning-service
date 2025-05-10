@@ -8,10 +8,16 @@ import RateLimit from 'express-rate-limit';
 import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import * as cheerio from 'cheerio';
+import SEA from 'gun/sea.js';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
-const initialPeers = [];
+const initialPeers = [
+    'https://citizen-x-bootsrap.onrender.com/gun',
+    'https://gun-manhattan.herokuapp.com/gun',
+    'https://peer1.gun.eco/gun',
+    'https://peer2.gun.eco/gun'
+];
 
 const app = express();
 
@@ -24,8 +30,8 @@ const corsOptions = {
         'chrome-extension://mbmlbbmhjhcmmpbieofegoefkhnbjmbj',
         'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap',
     ],
-    methods: ['GET', 'POST', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'X-User-DID'],
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type'],
     optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
@@ -33,7 +39,7 @@ app.use(cors(corsOptions));
 const limiter = RateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
-    keyGenerator: (req) => req.headers['x-user-did'] || req.ip,
+    keyGenerator: (req) => req.ip,
     message: 'Too many requests, please try again later.',
 });
 app.use(limiter);
@@ -83,7 +89,236 @@ const gun = Gun({
     peers: initialPeers,
     file: dataDir,
     radisk: true,
-    batch: false, // Disable batching to force immediate writes to disk
+    batch: false,
+});
+
+// Rate limiting per DID
+const rateLimits = new Map();
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
+const MAX_ACTIONS_PER_WINDOW = 100;
+
+async function checkRateLimit(did) {
+    const now = Date.now();
+    let record = rateLimits.get(did) || { count: 0, startTime: now };
+
+    if (now - record.startTime > RATE_LIMIT_WINDOW) {
+        record = { count: 0, startTime: now };
+    }
+
+    if (record.count >= MAX_ACTIONS_PER_WINDOW) {
+        throw new Error('Rate limit exceeded');
+    }
+
+    record.count++;
+    rateLimits.set(did, record);
+    gun.get('rateLimits').get(did).put(record, (ack) => {
+        if (ack.err) {
+            console.error('Failed to update rate limit for DID:', did, ack.err);
+        }
+    });
+}
+
+// SEA verification for Gun writes
+async function verifyGunWrite(data, key, msg, eve) {
+    // Skip verification for null writes, server-initiated writes, or non-user data
+    if (data === null || key.startsWith('knownPeers') || key.includes('replicationMarker') || !data.id) {
+        console.log('SEA: Skipping verification for non-user or null write:', key);
+        return true;
+    }
+
+    if (!data || typeof data !== 'object') {
+        console.warn('SEA: Rejecting invalid data:', { data, key });
+        return false;
+    }
+
+    const did = data.author || (data.deletion && data.deletion.author);
+    if (!did) {
+        console.error('SEA: Write rejected: Missing author DID for key:', key);
+        return false;
+    }
+
+    try {
+        await checkRateLimit(did);
+    } catch (error) {
+        console.error('SEA: Write rejected: Rate limit exceeded for DID:', did);
+        return false;
+    }
+
+    // Handle deletions
+    if (data.isDeleted) {
+        const deletionNode = gun.get('deletions').get(key);
+        const deletionData = await new Promise((resolve) => {
+            deletionNode.once((d) => resolve(d));
+        });
+
+        if (!deletionData || !deletionData.signature || !deletionData.author) {
+            console.error('SEA: Deletion rejected: Missing deletion signature for key:', key);
+            gun.get('securityLogs').get(did).get(Date.now()).put({
+                action: 'delete',
+                key,
+                error: 'Missing deletion signature',
+                timestamp: Date.now()
+            });
+            return false;
+        }
+
+        try {
+            const publicKey = await extractPublicKeyFromDID(deletionData.author);
+            const verified = await SEA.verify(deletionData.signature, publicKey, JSON.stringify({
+                key,
+                timestamp: deletionData.timestamp,
+                nonce: deletionData.nonce
+            }));
+
+            if (!verified) {
+                console.error('SEA: Deletion rejected: Invalid signature for key:', key);
+                gun.get('securityLogs').get(did).get(Date.now()).put({
+                    action: 'delete',
+                    key,
+                    error: 'Invalid deletion signature',
+                    timestamp: Date.now()
+                });
+                return false;
+            }
+
+            const now = Date.now();
+            if (Math.abs(now - deletionData.timestamp) > 5 * 60 * 1000) {
+                console.error('SEA: Deletion rejected: Signature timestamp too old for key:', key);
+                gun.get('securityLogs').get(did).get(Date.now()).put({
+                    action: 'delete',
+                    key,
+                    error: 'Signature timestamp too old',
+                    timestamp: Date.now()
+                });
+                return false;
+            }
+
+            const isAdmin = await new Promise((resolve) => {
+                gun.get('admins').get(did).once((data) => resolve(!!data));
+            });
+            const targetNode = gun.get(key.split('/')[0]).get(key.split('/')[1]).get(key.split('/')[2]);
+            const targetData = await new Promise((resolve) => {
+                targetNode.once((d) => resolve(d));
+            });
+
+            if (!isAdmin && deletionData.author !== targetData.author) {
+                console.error('SEA: Deletion rejected: Unauthorized DID for key:', key);
+                gun.get('securityLogs').get(did).get(Date.now()).put({
+                    action: 'delete',
+                    key,
+                    error: 'Unauthorized DID',
+                    timestamp: Date.now()
+                });
+                return false;
+            }
+
+            console.log('SEA: Deletion verified for key:', key);
+            return true;
+        } catch (error) {
+            console.error('SEA: Deletion verification failed for key:', key, error);
+            gun.get('securityLogs').get(did).get(Date.now()).put({
+                action: 'delete',
+                key,
+                error: error.message,
+                timestamp: Date.now()
+            });
+            return false;
+        }
+    }
+
+    // Handle annotations and comments
+    if (!data.signature || !data.author) {
+        console.warn('SEA: Write rejected: Missing signature or author for key:', key);
+        gun.get('securityLogs').get(did).get(Date.now()).put({
+            action: 'write',
+            key,
+            error: 'Missing signature or author',
+            timestamp: Date.now()
+        });
+        return false;
+    }
+
+    try {
+        const publicKey = await extractPublicKeyFromDID(data.author);
+        const dataToVerify = {
+            id: data.id,
+            url: data.url,
+            content: data.content,
+            author: data.author,
+            timestamp: data.timestamp,
+            nonce: data.nonce
+        };
+        const verified = await SEA.verify(data.signature, publicKey, JSON.stringify(dataToVerify));
+
+        if (!verified) {
+            console.error('SEA: Write rejected: Invalid signature for key:', key);
+            gun.get('securityLogs').get(did).get(Date.now()).put({
+                action: 'write',
+                key,
+                error: 'Invalid signature',
+                timestamp: Date.now()
+            });
+            return false;
+        }
+
+        const now = Date.now();
+        if (Math.abs(now - data.timestamp) > 5 * 60 * 1000) {
+            console.error('SEA: Write rejected: Signature timestamp too old for key:', key);
+            gun.get('securityLogs').get(did).get(Date.now()).put({
+                action: 'write',
+                key,
+                error: 'Signature timestamp too old',
+                timestamp: Date.now()
+            });
+            return false;
+        }
+
+        const versionKey = `${key}/versions/${data.timestamp}`;
+        gun.get(versionKey).put(data, (ack) => {
+            if (ack.err) {
+                console.error('Failed to store version for key:', versionKey, ack.err);
+            } else {
+                console.log('Stored version for key:', versionKey);
+            }
+        });
+
+        console.log('SEA: Write verified for key:', key);
+        return true;
+    } catch (error) {
+        console.error('SEA: Verification failed for key:', key, error);
+        gun.get('securityLogs').get(did).get(Date.now()).put({
+            action: 'write',
+            key,
+            error: error.message,
+            timestamp: Date.now()
+        });
+        return false;
+    }
+}
+
+gun._.on('put', async (msg, eve) => {
+    // Skip processing for internal writes with undefined souls or invalid data
+    if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
+        return;
+    }
+    console.log('Put hook triggered for souls:', msg.souls);
+    const { souls, data } = msg;
+    for (const soul in data) {
+        const nodeData = data[soul];
+        // Skip SEA verification for non-user data or null writes
+        if (nodeData === null || soul.startsWith('knownPeers') || soul.includes('replicationMarker')) {
+            console.log('Skipping SEA verification for soul:', soul);
+            continue;
+        }
+        if (nodeData && typeof nodeData === 'object') {
+            const verified = await verifyGunWrite(nodeData, soul, msg, eve);
+            if (!verified) {
+                console.warn('Write rejected for soul:', soul);
+                return;
+            }
+        }
+    }
+    // No explicit event propagation needed
 });
 
 const peerId = `${publicUrl}-bootstrap`;
@@ -128,74 +363,13 @@ function simpleHash(str) {
     return Math.abs(hash);
 }
 
-async function isAdmin(did) {
-    return new Promise((resolve) => {
-        gun.get('admins').get(did).once((data) => {
-            resolve(!!data);
-        });
-    });
+async function extractPublicKeyFromDID(did) {
+    if (!did.startsWith('did:key:')) {
+        throw new Error('Invalid DID format');
+    }
+    const keyPart = did.split('did:key:')[1];
+    return keyPart;
 }
-
-const verifyDeletePermission = async (req, res, next) => {
-    const requesterDid = req.headers['x-user-did'];
-    const { url, annotationId, commentId } = req.body;
-
-    if (!requesterDid) {
-        return res.status(401).json({ error: 'Unauthorized: Missing X-User-DID header' });
-    }
-
-    if (!url || !annotationId) {
-        return res.status(400).json({ error: 'Missing required parameters' });
-    }
-
-    try {
-        const normalizedUrl = normalizeUrl(url);
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
-        const annotationNodes = [
-            gun.get(domainShard).get(normalizedUrl),
-            ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
-        ];
-
-        let annotation;
-        for (const node of annotationNodes) {
-            const data = await new Promise((resolve) => {
-                node.get(annotationId).once((data) => resolve(data));
-            });
-            if (data) {
-                annotation = data;
-                break;
-            }
-        }
-
-        if (!annotation) {
-            return res.status(404).json({ error: 'Annotation not found' });
-        }
-
-        let targetAuthor;
-        if (commentId) {
-            const comment = await new Promise((resolve) => {
-                annotationNodes[0].get(annotationId).get('comments').get(commentId).once((data) => resolve(data));
-            });
-
-            if (!comment) {
-                return res.status(404).json({ error: 'Comment not found' });
-            }
-            targetAuthor = comment.author;
-        } else {
-            targetAuthor = annotation.author;
-        }
-
-        const isRequesterAdmin = await isAdmin(requesterDid);
-        if (requesterDid !== targetAuthor && !isRequesterAdmin) {
-            return res.status(403).json({ error: 'Forbidden: You can only delete your own content or must be an admin' });
-        }
-
-        next();
-    } catch (error) {
-        console.error('Error verifying delete permission:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-};
 
 const cleanupNullEntries = () => {
     console.log('Performing one-time cleanup of null entries in knownPeers...');
@@ -365,8 +539,6 @@ async function getProfileWithRetries(did, retries = 5, delay = 100) {
 async function fetchPageMetadata(url) {
     try {
         const response = await axios.get(url, { timeout: 5000 });
-        const window = new JSDOM('').window;
-        const purify = DOMPurify(window);
         const cleanHtml = purify.sanitize(response.data);
         const $ = cheerio.load(cleanHtml);
 
@@ -462,7 +634,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                             const timeout = setTimeout(() => {
                                 console.log(`Debug fetch comments for annotation ${annotationId} timed out after 500ms`);
                                 nodesProcessed = totalNodes;
-                                resolve(comments);
+                                resolve({ annotation: annotationData.annotation, comments });
                             }, 500);
 
                             node.get(annotationId).get('comments').map().once((comment, commentId) => {
@@ -479,7 +651,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 nodesProcessed++;
                                 if (nodesProcessed === totalNodes) {
                                     clearTimeout(timeout);
-                                    resolve(comments);
+                                    resolve({ annotation: annotationData.annotation, comments });
                                 }
                             });
 
@@ -487,7 +659,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 setTimeout(() => {
                                     if (nodesProcessed === 0) {
                                         clearTimeout(timeout);
-                                        resolve(comments);
+                                        resolve({ annotation: annotationData.annotation, comments });
                                     }
                                 }, 100);
                             }
@@ -495,22 +667,6 @@ app.get('/api/debug/annotations', async (req, res) => {
                             resolve(null);
                         }
                     });
-                }).then((comments) => {
-                    if (comments) {
-                        return {
-                            annotation: {
-                                id: annotationId,
-                                url: normalizedUrl,
-                                content: comments.content,
-                                author: comments.author,
-                                timestamp: comments.timestamp,
-                                isDeleted: comments.isDeleted || false,
-                                screenshot: comments.screenshot,
-                            },
-                            comments,
-                        };
-                    }
-                    return null;
                 })
             )
         );
@@ -537,7 +693,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                     const timeout = setTimeout(() => {
                         console.log(`Debug fetch comments from legacy node for annotation ${annotationId} timed out after 500ms`);
                         nodesProcessed = totalNodes;
-                        resolve(comments);
+                        resolve({ annotation: annotationData.annotation, comments });
                     }, 500);
 
                     legacyNode.get(annotationId).get('comments').map().once((comment, commentId) => {
@@ -554,7 +710,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                         nodesProcessed++;
                         if (nodesProcessed === totalNodes) {
                             clearTimeout(timeout);
-                            resolve(comments);
+                            resolve({ annotation: annotationData.annotation, comments });
                         }
                     });
 
@@ -562,30 +718,14 @@ app.get('/api/debug/annotations', async (req, res) => {
                         setTimeout(() => {
                             if (nodesProcessed === 0) {
                                 clearTimeout(timeout);
-                                resolve(comments);
+                                resolve({ annotation: annotationData.annotation, comments });
                             }
                         }, 100);
                     }
                 } else {
-                    resolve(null);
+                    resolve('Tombstoned or empty');
                 }
             });
-        }).then((comments) => {
-            if (comments) {
-                return {
-                    annotation: {
-                        id: annotationId,
-                        url: normalizedUrl,
-                        content: comments.content,
-                        author: comments.author,
-                        timestamp: comments.timestamp,
-                        isDeleted: comments.isDeleted || false,
-                        screenshot: comments.screenshot,
-                    },
-                    comments,
-                };
-            }
-            return 'Tombstoned or empty';
         });
 
         res.json({
@@ -629,34 +769,8 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
     }
 });
 
-// Middleware to force persistence after write operations
-const forcePersistence = async (req, res, next) => {
-    const originalJson = res.json.bind(res);
-    res.json = async (body) => {
-        if (req.method === 'POST' || req.method === 'DELETE') {
-            console.log('Forcing persistence after write operation:', req.method, req.url);
-            try {
-                await new Promise((resolve, reject) => {
-                    gun._.radisk.flush((err) => {
-                        if (err) {
-                            console.error('Failed to flush data to disk:', err);
-                            reject(new Error('Persistence flush failed'));
-                        } else {
-                            console.log('Data successfully flushed to disk');
-                            resolve();
-                        }
-                    });
-                });
-            } catch (error) {
-                console.error('Persistence error:', error);
-            }
-        }
-        return originalJson(body);
-    };
-    next();
-};
-
-app.use(forcePersistence);
+// Deduplication cache for annotations
+const annotationCache = new Map();
 
 app.get('/api/annotations', async (req, res) => {
     const totalStartTime = Date.now();
@@ -692,16 +806,16 @@ app.get('/api/annotations', async (req, res) => {
         const fetchAnnotationsStart = Date.now();
         const annotations = [];
         const loadedAnnotations = new Set();
-        const maxWaitTime = 3000; // Maximum time to wait for annotations (3 seconds)
+        const maxWaitTime = 3000;
 
         const fetchPromise = new Promise((resolve) => {
-            // Use map().on() to listen for real-time updates
             const onAnnotation = (annotation, key) => {
                 if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
                     console.log(`Skipped non-annotation node for URL: ${normalizedUrl}, Key: ${key}, Data:`, annotation);
                     return;
                 }
-                if (loadedAnnotations.has(annotation.id)) {
+                const cacheKey = `${normalizedUrl}:${annotation.id}`;
+                if (loadedAnnotations.has(annotation.id) || annotationCache.has(cacheKey)) {
                     console.log(`Skipped duplicate annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
                     return;
                 }
@@ -710,6 +824,7 @@ app.get('/api/annotations', async (req, res) => {
                     return;
                 }
                 loadedAnnotations.add(annotation.id);
+                annotationCache.set(cacheKey, Date.now());
                 annotations.push({
                     id: annotation.id,
                     url: annotation.url,
@@ -721,14 +836,11 @@ app.get('/api/annotations', async (req, res) => {
                 console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
             };
 
-            // Attach listeners to all nodes
             annotationNodes.forEach(node => {
-                node.map().on(onAnnotation);
+                node.map().on(onAnnotation, { change: true, filter: { isDeleted: false } });
             });
 
-            // Wait for annotations to load or timeout
             setTimeout(() => {
-                // Cleanup listeners
                 annotationNodes.forEach(node => node.map().off());
                 console.log(`Finished fetching annotations for URL: ${normalizedUrl}, Total annotations: ${annotations.length}`);
                 resolve(annotations);
@@ -746,7 +858,6 @@ app.get('/api/annotations', async (req, res) => {
             return res.status(404).json({ error: 'No annotations found for this URL' });
         }
 
-        // Sort annotations by timestamp (newest first)
         annotations.sort((a, b) => b.timestamp - a.timestamp);
         console.log(`Sorted annotations by timestamp (newest first), Total annotations: ${annotations.length}`);
 
@@ -854,16 +965,6 @@ app.get('/api/annotations', async (req, res) => {
                             }
                         }
 
-                        const firstState = statesList[0];
-                        for (let i = 1; i < statesList.length; i++) {
-                            if (statesList[i] !== firstState) {
-                                console.warn(
-                                    `Consistency warning: Comment ${commentId} has inconsistent isDeleted state across nodes:`,
-                                    statesList
-                                );
-                            }
-                        }
-
                         if (!isDeleted) {
                             console.log(`Including comment ${commentId} as it is not deleted in at least one node`);
                             resolvedComments.push(commentInstances[0]);
@@ -939,82 +1040,10 @@ app.get('/api/annotations', async (req, res) => {
     }
 });
 
-app.delete('/api/annotations', sanitizeInput, verifyDeletePermission, async (req, res) => {
-    const { url, annotationId } = req.body;
-
-    try {
-        const normalizedUrl = normalizeUrl(url);
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
-        const targetNode = subShard
-            ? gun.get(subShard).get(normalizedUrl)
-            : gun.get(domainShard).get(normalizedUrl);
-
-        await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).put({ isDeleted: true }, (ack) => {
-                if (ack.err) {
-                    console.error(
-                        `Failed to mark annotation as deleted for URL: ${normalizedUrl}, ID: ${annotationId}, Error:`,
-                        ack.err
-                    );
-                    reject(new Error(ack.err));
-                } else {
-                    console.log(
-                        `Successfully marked annotation as deleted for URL: ${normalizedUrl}, ID: ${annotationId}`
-                    );
-                    resolve();
-                }
-            });
-        });
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error deleting annotation:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-app.delete('/api/comments', sanitizeInput, verifyDeletePermission, async (req, res) => {
-    const { url, annotationId, commentId } = req.body;
-
-    if (!commentId) {
-        return res.status(400).json({ error: 'Missing commentId parameter' });
-    }
-
-    try {
-        const normalizedUrl = normalizeUrl(url);
-        const { domainShard, subShard } = getShardKey(normalizedUrl);
-        const targetNode = subShard
-            ? gun.get(subShard).get(normalizedUrl)
-            : gun.get(domainShard).get(normalizedUrl);
-
-        await new Promise((resolve, reject) => {
-            targetNode.get(annotationId).get('comments').get(commentId).put({ isDeleted: true }, (ack) => {
-                if (ack.err) {
-                    console.error(
-                        `Failed to mark comment as deleted for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}, Error:`,
-                        ack.err
-                    );
-                    reject(new Error(ack.err));
-                } else {
-                    console.log(
-                        `Successfully marked comment as deleted for URL: ${normalizedUrl}, Annotation ID: ${annotationId}, Comment ID: ${commentId}`
-                    );
-                    resolve();
-                }
-            });
-        });
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error deleting comment:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
-console.log(`Initial peers: ${initialPeers.length > 0 ? initialPeers.join(', ') : 'none'}`);
+console.log(`Initial peers: ${initialPeers.join(', ')}`);
 
 gun.on('hi', (peer) => {
-    console.log('Connected to peer:', peer);
+    console.log('Connected to peer:', peer.url);
 });
