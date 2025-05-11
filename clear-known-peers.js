@@ -1,17 +1,45 @@
 import Gun from 'gun';
-import axios from 'axios';
+import WebSocket from 'ws';
 
 const gunServerUrl = 'https://citizen-x-bootsrap.onrender.com/gun';
+const wsServerUrl = gunServerUrl.replace('https://', 'wss://');
 
 async function testServerConnectivity() {
-    try {
-        await axios.get(gunServerUrl, { timeout: 5000 });
-        console.log('Server is responsive:', gunServerUrl);
-        return true;
-    } catch (error) {
-        console.error('Server is not responsive:', error.message);
-        return false;
+    const maxRetries = 3;
+    let attempt = 0;
+
+    while (attempt < maxRetries) {
+        attempt++;
+        try {
+            await new Promise((resolve, reject) => {
+                const ws = new WebSocket(wsServerUrl);
+                const timeout = setTimeout(() => {
+                    ws.close();
+                    reject(new Error(`Timeout connecting to ${wsServerUrl}`));
+                }, 5000);
+
+                ws.on('open', () => {
+                    clearTimeout(timeout);
+                    ws.close();
+                    resolve();
+                });
+
+                ws.on('error', (error) => {
+                    clearTimeout(timeout);
+                    reject(error);
+                });
+            });
+            console.log(`WebSocket connection successful (attempt ${attempt}):`, wsServerUrl);
+            return true;
+        } catch (error) {
+            console.error(`WebSocket connection failed (attempt ${attempt}):`, error.message);
+            if (attempt === maxRetries) {
+                return false;
+            }
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
     }
+    return false;
 }
 
 const gun = Gun({
@@ -25,6 +53,28 @@ async function clearKnownPeers() {
     // Test server connectivity
     if (!(await testServerConnectivity())) {
         console.error('Aborting cleanup due to server unresponsiveness.');
+        process.exit(1);
+    }
+
+    // Pre-cleanup write test
+    console.log('Performing pre-cleanup write test...');
+    try {
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Timeout during pre-cleanup write test'));
+            }, 10000);
+            gun.get('test').put({ ping: Date.now() }, (ack) => {
+                clearTimeout(timeout);
+                if (ack.err) {
+                    reject(new Error(`Pre-cleanup write test failed: ${ack.err}`));
+                } else {
+                    console.log('Pre-cleanup write test successful');
+                    resolve();
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Pre-cleanup write test failed:', error.message);
         process.exit(1);
     }
 
@@ -52,7 +102,7 @@ async function clearKnownPeers() {
                 setTimeout(() => {
                     clearTimeout(timeout);
                     resolve();
-                }, 10000); // Wait 10 seconds to collect IDs
+                }, 10000);
             }).catch(error => {
                 console.warn(`Continuing after error collecting IDs: ${error.message}`);
             });
@@ -69,7 +119,7 @@ async function clearKnownPeers() {
                     const timeout = setTimeout(() => {
                         console.error(`Timeout waiting for put(null) acknowledgment: ${id}`);
                         reject(new Error(`Timeout for ${id}`));
-                    }, 15000);
+                    }, 30000); // Increased to 30 seconds
                     gun.get('knownPeers').get(id).put(null, (ack) => {
                         clearTimeout(timeout);
                         if (ack.err) {
@@ -85,7 +135,7 @@ async function clearKnownPeers() {
             }
 
             // Wait for changes to propagate
-            await new Promise(resolve => setTimeout(resolve, 30000)); // 30 seconds
+            await new Promise(resolve => setTimeout(resolve, 30000));
 
             // Verify cleanup
             console.log('Verifying cleanup...');
@@ -120,7 +170,7 @@ async function clearKnownPeers() {
                         const timeout = setTimeout(() => {
                             console.error(`Timeout waiting for put({}) acknowledgment: ${id}`);
                             reject(new Error(`Timeout for ${id}`));
-                        }, 15000);
+                        }, 30000);
                         gun.get('knownPeers').get(id).put({}, (ack) => {
                             clearTimeout(timeout);
                             if (ack.err) {
@@ -170,7 +220,7 @@ async function clearKnownPeers() {
                             const timeout = setTimeout(() => {
                                 console.error(`Timeout waiting for field unset acknowledgment: ${id}`);
                                 reject(new Error(`Timeout for ${id}`));
-                            }, 15000);
+                            }, 30000);
                             gun.get('knownPeers').get(id).put({ url: null, timestamp: null }, (ack) => {
                                 clearTimeout(timeout);
                                 if (ack.err) {
@@ -215,7 +265,7 @@ async function clearKnownPeers() {
                             const timeout = setTimeout(() => {
                                 console.error('Timeout waiting for knownPeers clear acknowledgment');
                                 reject(new Error('Timeout clearing knownPeers'));
-                            }, 15000);
+                            }, 30000);
                             gun.get('knownPeers').put(null, (ack) => {
                                 clearTimeout(timeout);
                                 if (ack.err) {
@@ -265,14 +315,14 @@ async function clearKnownPeers() {
             if (attempt === maxRetries) {
                 throw error;
             }
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, 5000));
         }
     }
 }
 
 clearKnownPeers().then(() => {
     console.log('Script completed successfully.');
-    setTimeout(() => process.exit(0), 1000); // Exit after 1 second
+    setTimeout(() => process.exit(0), 1000);
 }).catch(error => {
     console.error('Cleanup failed:', error);
     process.exit(1);
