@@ -334,6 +334,32 @@ async function verifyGunWrite(data, key, msg, eve) {
     }
 }
 
+// Rate limiting per DID
+const rateLimits = new Map();
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
+const MAX_ACTIONS_PER_WINDOW = 100;
+
+async function checkRateLimit(did) {
+    const now = Date.now();
+    let record = rateLimits.get(did) || { count: 0, startTime: now };
+
+    if (now - record.startTime > RATE_LIMIT_WINDOW) {
+        record = { count: 0, startTime: now };
+    }
+
+    if (record.count >= MAX_ACTIONS_PER_WINDOW) {
+        throw new Error('Rate limit exceeded');
+    }
+
+    record.count++;
+    rateLimits.set(did, record);
+    gun.get('rateLimits').get(did).put(record, (ack) => {
+        if (ack.err) {
+            console.error('Failed to update rate limit for DID:', did, ack.err);
+        }
+    });
+}
+
 const peerId = `${publicUrl}-bootstrap`;
 
 function normalizeUrl(url) {
@@ -377,31 +403,12 @@ function simpleHash(str) {
 }
 
 async function extractPublicKeyFromDID(did) {
-    if (!did.startsWith(' grok://')) {
+    if (!did.startsWith('did:key:')) {
         throw new Error('Invalid DID format');
     }
-    const keyPart = did.split('grok://')[1];
+    const keyPart = did.split('did:key:')[1];
     return keyPart;
 }
-
-const clearKnownPeers = () => {
-    console.log('Performing one-time cleanup of all knownPeers entries...');
-    gun.get('knownPeers').map().once((peer, id) => {
-        if (!id) {
-            console.log('Skipping empty ID');
-            return;
-        }
-        console.log(`Removing peer entry: ${id}, URL: ${peer?.url || 'no url'}`);
-        gun.get('knownPeers').get(id).put(null, (ack) => {
-            if (ack.err) {
-                console.error(`Failed to remove peer entry: ${id}, Error: ${ack.err}`);
-            } else {
-                console.log(`Successfully removed peer entry: ${id}`);
-            }
-        });
-    });
-};
-// clearKnownPeers(); // Commented out; enable for first deploy if needed
 
 const ensureServerPeer = () => {
     console.log('Ensuring server peer in knownPeers...');
@@ -411,6 +418,7 @@ const ensureServerPeer = () => {
         const peerData = {
             url: `${publicUrl}/gun`,
             timestamp: now,
+            lastConnection: now,
         };
         gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
             if (ack.err) {
@@ -422,7 +430,44 @@ const ensureServerPeer = () => {
     });
 };
 
-ensureServerPeer();
+// Periodically update server peer's lastConnection
+setInterval(() => {
+    const now = Date.now();
+    gun.get('knownPeers').get(peerId).put({
+        url: `${publicUrl}/gun`,
+        timestamp: now,
+        lastConnection: now,
+    }, (ack) => {
+        if (ack.err) {
+            console.error('Failed to update server peer lastConnection:', ack.err);
+        } else {
+            console.log(`Updated server peer lastConnection: ${peerId}`);
+        }
+    });
+}, 5 * 60 * 1000); // Every 5 minutes
+
+// Update lastConnection for incoming peer connections
+gun.on('hi', (peer) => {
+    if (peer.url) {
+        console.log('Connected to peer:', peer.url);
+        const peerId = peer.url.replace(/[^a-zA-Z0-9-]/g, '-') || `peer-${Date.now()}`;
+        gun.get('knownPeers').get(peerId).once((data) => {
+            const now = Date.now();
+            const peerData = {
+                url: peer.url,
+                timestamp: data?.timestamp || now,
+                lastConnection: now,
+            };
+            gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
+                if (ack.err) {
+                    console.error(`Failed to update lastConnection for peer ${peerId}:`, ack.err);
+                } else {
+                    console.log(`Updated lastConnection for peer: ${peerId}, URL: ${peer.url}`);
+                }
+            });
+        });
+    }
+});
 
 const profileCache = new Map();
 
@@ -875,7 +920,7 @@ app.get('/api/annotations', async (req, res) => {
                     })
                 );
                 const fetchCommentProfilesEnd = Date.now();
-                console.log(` Farms comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
+                console.log(`[Timing] Fetch comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
 
                 let metadata;
                 if (!annotation.screenshot) {
@@ -928,7 +973,3 @@ app.get('/api/annotations', async (req, res) => {
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
 console.log(`Initial peers: ${initialPeers.join(', ')}`);
-
-gun.on('hi', (peer) => {
-    console.log('Connected to peer:', peer.url || 'unknown');
-});
