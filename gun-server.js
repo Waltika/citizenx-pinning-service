@@ -438,22 +438,6 @@ const ensureServerPeer = () => {
 
 ensureServerPeer();
 
-setInterval(() => {
-    const now = Date.now();
-    console.log('Updating server peer timestamp...');
-    const peerData = {
-        url: `${publicUrl}/gun`,
-        timestamp: now,
-    };
-    gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
-        if (ack.err) {
-            console.error('Failed to update server timestamp in knownPeers:', ack.err);
-        } else {
-            console.log('Updated server timestamp in knownPeers');
-        }
-    });
-}, 5 * 60 * 1000);
-
 const profileCache = new Map();
 
 async function getProfileWithRetries(did, retries = 5, delay = 100) {
