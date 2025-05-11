@@ -123,7 +123,7 @@ gun._.on('put', async (msg, eve) => {
             try {
                 if (soul === 'test' || soul.startsWith('knownPeers')) {
                     if (data[soul] === null) {
-                        console.log(`Write detected: ${soul} (cleanup)`);
+                        console.log(`Write detected: ${soul} (cleanup)`); // Always log cleanup
                     } else if (throttleLog(`write_${soul}`, 60000)) {
                         console.log(`Write detected: ${soul}`);
                     }
