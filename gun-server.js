@@ -12,9 +12,7 @@ import SEA from 'gun/sea.js';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
-const initialPeers = [
-    'https://citizen-x-bootsrap.onrender.com/gun',
-];
+const initialPeers = []; // No self-connection
 
 const app = express();
 
@@ -117,8 +115,29 @@ async function checkRateLimit(did) {
 
 // SEA verification for Gun writes
 async function verifyGunWrite(data, key, msg, eve) {
-    // Skip verification for null writes, server-initiated writes, or non-user data
-    if (data === null || key.startsWith('knownPeers') || key.includes('replicationMarker') || !data.id) {
+    if (key.startsWith('knownPeers')) {
+        if (data === null) {
+            console.log('SEA: Allowing null write for knownPeers cleanup:', key);
+            return true;
+        }
+        if (!data || !data.url || !data.timestamp) {
+            console.warn('SEA: Rejecting invalid knownPeers write: Missing url or timestamp:', key);
+            return false;
+        }
+        const validUrlPattern = /^https:\/\/[a-zA-Z0-9-.]+\.[a-zA-Z]{2,}(:\d+)?\/gun$/;
+        if (!validUrlPattern.test(data.url)) {
+            console.warn('SEA: Rejecting knownPeers write with invalid URL:', data.url);
+            return false;
+        }
+        if (data.url === `${publicUrl}/gun` && key !== peerId) {
+            console.log('SEA: Skipping redundant self-connection for knownPeers:', data.url);
+            return false;
+        }
+        console.log('SEA: Validated knownPeers write:', key, data.url);
+        return true;
+    }
+
+    if (data === null || key.includes('replicationMarker') || !data.id) {
         console.log('SEA: Skipping verification for non-user or null write:', key);
         return true;
     }
@@ -141,7 +160,6 @@ async function verifyGunWrite(data, key, msg, eve) {
         return false;
     }
 
-    // Handle deletions
     if (data.isDeleted) {
         const deletionNode = gun.get('deletions').get(key);
         const deletionData = await new Promise((resolve) => {
@@ -223,7 +241,6 @@ async function verifyGunWrite(data, key, msg, eve) {
         }
     }
 
-    // Handle annotations and comments
     if (!data.signature || !data.author) {
         console.warn('SEA: Write rejected: Missing signature or author for key:', key);
         gun.get('securityLogs').get(did).get(Date.now()).put({
@@ -300,8 +317,11 @@ gun._.on('put', async (msg, eve) => {
     console.log('Put hook triggered for souls:', msg.souls);
     const { souls, data } = msg;
     for (const soul in data) {
+        if (soul.startsWith('knownPeers')) {
+            console.log('knownPeers write detected:', soul, data[soul]);
+        }
         const nodeData = data[soul];
-        if (nodeData === null || soul.startsWith('knownPeers') || soul.includes('replicationMarker')) {
+        if (nodeData === null || soul.includes('replicationMarker')) {
             console.log('Skipping SEA verification for soul:', soul);
             continue;
         }
@@ -365,21 +385,24 @@ async function extractPublicKeyFromDID(did) {
     return keyPart;
 }
 
-const cleanupNullEntries = () => {
-    console.log('Performing one-time cleanup of null entries in knownPeers...');
+const clearKnownPeers = () => {
+    console.log('Performing one-time cleanup of all knownPeers entries...');
     gun.get('knownPeers').map().once((peer, id) => {
-        if (!peer || !peer.url || !peer.timestamp) {
-            console.log('Startup cleanup - Removing null or invalid peer entry:', id);
-            gun.get('knownPeers').get(id).put(null, (ack) => {
-                if (ack.err) {
-                    console.error('Startup cleanup - Failed to remove peer entry:', id, ack.err);
-                } else {
-                    console.log('Startup cleanup - Successfully removed peer entry:', id);
-                }
-            });
+        if (!id) {
+            console.log('Skipping empty ID');
+            return;
         }
+        console.log(`Removing peer entry: ${id}, URL: ${peer?.url || 'no url'}`);
+        gun.get('knownPeers').get(id).put(null, (ack) => {
+            if (ack.err) {
+                console.error(`Failed to remove peer entry: ${id}, Error: ${ack.err}`);
+            } else {
+                console.log(`Successfully removed peer entry: ${id}`);
+            }
+        });
     });
 };
+clearKnownPeers(); // Run once, then comment out
 
 const ensureServerPeer = () => {
     console.log('Ensuring server peer in knownPeers...');
@@ -390,22 +413,16 @@ const ensureServerPeer = () => {
             url: `${publicUrl}/gun`,
             timestamp: now,
         };
-        if (!data || !data.url || !data.timestamp || (now - data.timestamp > 10 * 60 * 1000)) {
-            console.log('Registering server peer:', peerId);
-            gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
-                if (ack.err) {
-                    console.error('Failed to register server in knownPeers:', ack.err);
-                } else {
-                    console.log(`Successfully registered server in knownPeers: ${publicUrl}/gun`);
-                }
-            });
-        } else {
-            console.log('Server peer already registered and valid:', data.url, 'Age:', (now - data.timestamp) / 1000, 'seconds');
-        }
+        gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
+            if (ack.err) {
+                console.error('Failed to register server in knownPeers:', ack.err);
+            } else {
+                console.log(`Successfully registered server in knownPeers: ${publicUrl}/gun`);
+            }
+        });
     });
 };
 
-cleanupNullEntries();
 ensureServerPeer();
 
 setInterval(() => {
@@ -423,57 +440,6 @@ setInterval(() => {
         }
     });
 }, 5 * 60 * 1000);
-
-let lastCleanup = 0;
-const cleanupInterval = 2 * 60 * 1000;
-const cleanupThrottle = 1 * 60 * 1000;
-
-const removedPeers = new Set();
-
-setInterval(() => {
-    const now = Date.now();
-    if (now - lastCleanup < cleanupThrottle) {
-        return;
-    }
-
-    lastCleanup = now;
-    console.log('Running peer cleanup...');
-    gun.get('knownPeers').map().once((peer, id) => {
-        if (removedPeers.has(id)) {
-            return;
-        }
-
-        if (!peer || !peer.url || !peer.timestamp) {
-            console.log('Removing null or invalid peer entry:', id);
-            gun.get('knownPeers').get(id).put(null, (ack) => {
-                if (ack.err) {
-                    console.error('Failed to remove peer entry:', id, ack.err);
-                } else {
-                    console.log('Successfully removed peer entry:', id);
-                    removedPeers.add(id);
-                }
-            });
-        } else {
-            const age = now - peer.timestamp;
-            if (age > 10 * 60 * 1000) {
-                console.log('Removing stale peer:', peer.url, 'Age:', age / 1000, 'seconds');
-                gun.get('knownPeers').get(id).put(null, (ack) => {
-                    if (ack.err) {
-                        console.error('Failed to remove stale peer:', id, ack.err);
-                    } else {
-                        console.log('Successfully removed stale peer:', id);
-                        removedPeers.add(id);
-                    }
-                });
-            }
-        }
-    });
-
-    setTimeout(() => {
-        removedPeers.clear();
-        console.log('Cleared removedPeers set');
-    }, 24 * 60 * 60 * 1000);
-}, cleanupInterval);
 
 const profileCache = new Map();
 
@@ -704,7 +670,6 @@ app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
     }
 });
 
-// Deduplication cache for annotations
 const annotationCache = new Map();
 
 app.get('/api/annotations', async (req, res) => {
