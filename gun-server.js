@@ -182,7 +182,7 @@ async function verifyGunWrite(data, key, msg, eve) {
             }
 
             const now = Date.now();
-            if (Math.abs(now - deletionData.timestamp) > 5 * 60 * 1000) {
+            if (Math.abs(now - deletionData.timestamp) > 30 * 60 * 1000) {
                 console.error('SEA: Deletion rejected: Signature timestamp too old for key:', key);
                 gun.get('securityLogs').get(did).get(Date.now()).put({
                     action: 'delete',
@@ -262,7 +262,7 @@ async function verifyGunWrite(data, key, msg, eve) {
         }
 
         const now = Date.now();
-        if (Math.abs(now - data.timestamp) > 5 * 60 * 1000) {
+        if (Math.abs(now - data.timestamp) > 30 * 60 * 1000) {
             console.error('SEA: Write rejected: Signature timestamp too old for key:', key);
             gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'write',
@@ -297,7 +297,6 @@ async function verifyGunWrite(data, key, msg, eve) {
 }
 
 gun._.on('put', async (msg, eve) => {
-    // Skip processing for internal writes with undefined souls or invalid data
     if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
         return;
     }
@@ -305,7 +304,6 @@ gun._.on('put', async (msg, eve) => {
     const { souls, data } = msg;
     for (const soul in data) {
         const nodeData = data[soul];
-        // Skip SEA verification for non-user data or null writes
         if (nodeData === null || soul.startsWith('knownPeers') || soul.includes('replicationMarker')) {
             console.log('Skipping SEA verification for soul:', soul);
             continue;
@@ -318,7 +316,6 @@ gun._.on('put', async (msg, eve) => {
             }
         }
     }
-    // No explicit event propagation needed
 });
 
 const peerId = `${publicUrl}-bootstrap`;
@@ -608,8 +605,6 @@ app.get('/api/debug/annotations', async (req, res) => {
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
         ];
 
-        const legacyNode = gun.get('annotations').get(normalizedUrl);
-
         const shardedData = await Promise.all(
             annotationNodes.map((node) =>
                 new Promise((resolve) => {
@@ -624,6 +619,7 @@ app.get('/api/debug/annotations', async (req, res) => {
                                 timestamp: annotation.timestamp,
                                 isDeleted: annotation.isDeleted || false,
                                 screenshot: annotation.screenshot,
+                                metadata: annotation.metadata || {},
                             };
 
                             const comments = [];
@@ -671,66 +667,8 @@ app.get('/api/debug/annotations', async (req, res) => {
             )
         );
 
-        const legacyData = await new Promise((resolve) => {
-            const annotationData = {};
-            legacyNode.get(annotationId).once((annotation) => {
-                if (annotation) {
-                    annotationData.annotation = {
-                        id: annotationId,
-                        url: annotation.url,
-                        content: annotation.content,
-                        author: annotation.author,
-                        timestamp: annotation.timestamp,
-                        isDeleted: annotation.isDeleted || false,
-                        screenshot: annotation.screenshot,
-                    };
-
-                    const comments = [];
-                    const commentIds = new Set();
-                    let nodesProcessed = 0;
-                    const totalNodes = 1;
-
-                    const timeout = setTimeout(() => {
-                        console.log(`Debug fetch comments from legacy node for annotation ${annotationId} timed out after 500ms`);
-                        nodesProcessed = totalNodes;
-                        resolve({ annotation: annotationData.annotation, comments });
-                    }, 500);
-
-                    legacyNode.get(annotationId).get('comments').map().once((comment, commentId) => {
-                        if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
-                            commentIds.add(commentId);
-                            comments.push({
-                                id: commentId,
-                                content: comment.content,
-                                author: comment.author,
-                                timestamp: comment.timestamp,
-                                isDeleted: comment.isDeleted || false,
-                            });
-                        }
-                        nodesProcessed++;
-                        if (nodesProcessed === totalNodes) {
-                            clearTimeout(timeout);
-                            resolve({ annotation: annotationData.annotation, comments });
-                        }
-                    });
-
-                    if (nodesProcessed === 0) {
-                        setTimeout(() => {
-                            if (nodesProcessed === 0) {
-                                clearTimeout(timeout);
-                                resolve({ annotation: annotationData.annotation, comments });
-                            }
-                        }, 100);
-                    }
-                } else {
-                    resolve('Tombstoned or empty');
-                }
-            });
-        });
-
         res.json({
             shardedData: shardedData.filter(data => data !== null),
-            legacyData: legacyData,
         });
     } catch (error) {
         console.error('Error debugging annotations:', error);
@@ -789,7 +727,7 @@ app.get('/api/annotations', async (req, res) => {
     try {
         const cacheClearStart = Date.now();
         profileCache.clear();
-        annotationCache.clear(); // Clear annotation cache to prevent cross-request interference
+        annotationCache.clear();
         const cacheClearEnd = Date.now();
         console.log(`[Timing] Cleared profile and annotation caches in ${cacheClearEnd - cacheClearStart}ms`);
 
@@ -799,7 +737,6 @@ app.get('/api/annotations', async (req, res) => {
         const { domainShard, subShard } = getShardKey(normalizedUrl);
         console.log(`Querying shards for URL: ${normalizedUrl}, domainShard: ${domainShard}, subShard: ${subShard}`);
         const annotationNodes = [
-            gun.get('annotations').get(normalizedUrl),
             gun.get(domainShard).get(normalizedUrl),
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
         ];
@@ -807,7 +744,7 @@ app.get('/api/annotations', async (req, res) => {
         const fetchAnnotationsStart = Date.now();
         const annotations = [];
         const loadedAnnotations = new Set();
-        const maxWaitTime = 5000; // Increased to 5000ms to allow more time for data retrieval
+        const maxWaitTime = 5000;
 
         const fetchPromise = new Promise((resolve) => {
             const onAnnotation = (annotation, key) => {
@@ -816,7 +753,7 @@ app.get('/api/annotations', async (req, res) => {
                     return;
                 }
                 const cacheKey = `${normalizedUrl}:${annotation.id}`;
-                console.log(`Processing annotation for URL: ${normalizedUrl}, ID: ${annotation.id}, CacheKey: ${cacheKey}`); // Debug logging
+                console.log(`Processing annotation for URL: ${normalizedUrl}, ID: ${annotation.id}, CacheKey: ${cacheKey}`);
                 if (loadedAnnotations.has(annotation.id) || annotationCache.has(cacheKey)) {
                     console.log(`Skipped duplicate annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
                     return;
@@ -834,6 +771,7 @@ app.get('/api/annotations', async (req, res) => {
                     author: annotation.author,
                     timestamp: annotation.timestamp,
                     screenshot: annotation.screenshot,
+                    metadata: annotation.metadata || {},
                 });
                 console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
             };
