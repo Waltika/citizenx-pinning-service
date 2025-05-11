@@ -99,7 +99,7 @@ function throttleLog(message, interval = 60000) {
     return true;
 }
 
-// Log incoming messages (simplified)
+// Log incoming messages
 gun._.on('in', (msg) => {
     if (msg.put) {
         const souls = Object.keys(msg.put).join(', ');
@@ -109,7 +109,7 @@ gun._.on('in', (msg) => {
     }
 });
 
-// Put hook with simplified logging
+// Put hook with improved logging and null handling
 gun._.on('put', async (msg, eve) => {
     try {
         if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
@@ -123,7 +123,8 @@ gun._.on('put', async (msg, eve) => {
             try {
                 if (soul === 'test' || soul.startsWith('knownPeers')) {
                     if (data[soul] === null) {
-                        console.log(`Write detected: ${soul} (cleanup)`); // Always log cleanup
+                        console.log(`Write detected: ${soul} (cleanup)`);
+                        continue; // Allow null writes for cleanup
                     } else if (throttleLog(`write_${soul}`, 60000)) {
                         console.log(`Write detected: ${soul}`);
                     }
@@ -156,6 +157,7 @@ gun._.on('put', async (msg, eve) => {
 async function verifyGunWrite(data, key, msg, eve) {
     if (key === 'test' || key.startsWith('knownPeers')) {
         if (data === null) {
+            console.log(`SEA: Allowing null write for ${key}`);
             return true;
         }
         if (key.startsWith('knownPeers')) {
