@@ -89,42 +89,62 @@ const gun = Gun({
     batch: false,
 });
 
-// Log all incoming messages
+// Throttle logging to reduce verbosity
+const logThrottle = new Map();
+function throttleLog(message, interval = 60000) {
+    const now = Date.now();
+    const lastTime = logThrottle.get(message) || 0;
+    if (now - lastTime < interval) return false;
+    logThrottle.set(message, now);
+    return true;
+}
+
+// Log incoming messages (simplified)
 gun._.on('in', (msg) => {
     if (msg.put) {
-        console.log('Incoming write request:', JSON.stringify(msg.put, null, 2));
+        const souls = Object.keys(msg.put).join(', ');
+        if (throttleLog(`write_${souls}`, 60000)) {
+            console.log(`Incoming write request for souls: ${souls}`);
+        }
     }
 });
 
-// Put hook with simplified SEA bypass for test and knownPeers
+// Put hook with simplified logging
 gun._.on('put', async (msg, eve) => {
     try {
         if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
-            console.log('Skipping invalid put request:', msg);
+            if (throttleLog('invalid_put')) {
+                console.log('Skipping invalid put request');
+            }
             return;
         }
-        console.log('Put hook triggered for souls:', msg.souls);
         const { souls, data } = msg;
         for (const soul in data) {
             try {
                 if (soul === 'test' || soul.startsWith('knownPeers')) {
-                    console.log('Write detected:', soul, data[soul]);
-                    continue; // Bypass SEA for test and knownPeers
+                    if (data[soul] === null) {
+                        console.log(`Write detected: ${soul} (cleanup)`);
+                    } else if (throttleLog(`write_${soul}`, 60000)) {
+                        console.log(`Write detected: ${soul}`);
+                    }
+                    continue;
                 }
                 const nodeData = data[soul];
                 if (nodeData === null || soul.includes('replicationMarker')) {
-                    console.log('Skipping SEA verification for soul:', soul);
+                    if (throttleLog(`skip_${soul}`)) {
+                        console.log(`Skipping SEA verification for soul: ${soul}`);
+                    }
                     continue;
                 }
                 if (nodeData && typeof nodeData === 'object') {
                     const verified = await verifyGunWrite(nodeData, soul, msg, eve);
                     if (!verified) {
-                        console.warn('Write rejected for soul:', soul);
+                        console.warn(`Write rejected for soul: ${soul}`);
                         return;
                     }
                 }
             } catch (error) {
-                console.error('Error processing soul:', soul, error);
+                console.error(`Error processing soul: ${soul}`, error);
             }
         }
     } catch (error) {
@@ -132,55 +152,49 @@ gun._.on('put', async (msg, eve) => {
     }
 });
 
-// SEA verification for Gun writes
+// SEA verification with minimal logging
 async function verifyGunWrite(data, key, msg, eve) {
-    console.log(`verifyGunWrite called: key=${key}, data=`, data);
     if (key === 'test' || key.startsWith('knownPeers')) {
         if (data === null) {
-            console.log('SEA: Allowing null write for test or knownPeers cleanup:', key);
             return true;
         }
         if (key.startsWith('knownPeers')) {
             if (!data || !data.url || !data.timestamp) {
-                console.warn('SEA: Rejecting invalid knownPeers write: Missing url or timestamp:', key);
+                console.warn(`SEA: Rejecting invalid knownPeers write: ${key}`);
                 return false;
             }
             const validUrlPattern = /^https:\/\/[a-zA-Z0-9-.]+\.[a-zA-Z]{2,}(:\d+)?\/gun$/;
             if (!validUrlPattern.test(data.url)) {
-                console.warn('SEA: Rejecting knownPeers write with invalid URL:', data.url);
+                console.warn(`SEA: Rejecting knownPeers write with invalid URL: ${data.url}`);
                 return false;
             }
             if (data.url === `${publicUrl}/gun` && key !== peerId) {
-                console.log('SEA: Skipping redundant self-connection for knownPeers:', data.url);
                 return false;
             }
-            console.log('SEA: Validated knownPeers write:', key, data.url);
             return true;
         }
-        console.log('SEA: Allowing test write:', key);
         return true;
     }
 
     if (data === null || key.includes('replicationMarker') || !data.id) {
-        console.log('SEA: Skipping verification for non-user or null write:', key);
         return true;
     }
 
     if (!data || typeof data !== 'object') {
-        console.warn('SEA: Rejecting invalid data:', { data, key });
+        console.warn(`SEA: Rejecting invalid data: ${key}`);
         return false;
     }
 
     const did = data.author || (data.deletion && data.deletion.author);
     if (!did) {
-        console.error('SEA: Write rejected: Missing author DID for key:', key);
+        console.error(`SEA: Write rejected: Missing author DID for key: ${key}`);
         return false;
     }
 
     try {
         await checkRateLimit(did);
     } catch (error) {
-        console.error('SEA: Write rejected: Rate limit exceeded for DID:', did);
+        console.error(`SEA: Write rejected: Rate limit exceeded for DID: ${did}`);
         return false;
     }
 
@@ -191,7 +205,7 @@ async function verifyGunWrite(data, key, msg, eve) {
         });
 
         if (!deletionData || !deletionData.signature || !deletionData.author) {
-            console.error('SEA: Deletion rejected: Missing deletion signature for key:', key);
+            console.error(`SEA: Deletion rejected: Missing deletion signature for key: ${key}`);
             gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'delete',
                 key,
@@ -210,7 +224,7 @@ async function verifyGunWrite(data, key, msg, eve) {
             }));
 
             if (!verified) {
-                console.error('SEA: Deletion rejected: Invalid signature for key:', key);
+                console.error(`SEA: Deletion rejected: Invalid signature for key: ${key}`);
                 gun.get('securityLogs').get(did).get(Date.now()).put({
                     action: 'delete',
                     key,
@@ -222,7 +236,7 @@ async function verifyGunWrite(data, key, msg, eve) {
 
             const now = Date.now();
             if (Math.abs(now - deletionData.timestamp) > 30 * 60 * 1000) {
-                console.error('SEA: Deletion rejected: Signature timestamp too old for key:', key);
+                console.error(`SEA: Deletion rejected: Signature timestamp too old for key: ${key}`);
                 gun.get('securityLogs').get(did).get(Date.now()).put({
                     action: 'delete',
                     key,
@@ -241,7 +255,7 @@ async function verifyGunWrite(data, key, msg, eve) {
             });
 
             if (!isAdmin && deletionData.author !== targetData.author) {
-                console.error('SEA: Deletion rejected: Unauthorized DID for key:', key);
+                console.error(`SEA: Deletion rejected: Unauthorized DID for key: ${key}`);
                 gun.get('securityLogs').get(did).get(Date.now()).put({
                     action: 'delete',
                     key,
@@ -251,10 +265,9 @@ async function verifyGunWrite(data, key, msg, eve) {
                 return false;
             }
 
-            console.log('SEA: Deletion verified for key:', key);
             return true;
         } catch (error) {
-            console.error('SEA: Deletion verification failed for key:', key, error);
+            console.error(`SEA: Deletion verification failed for key: ${key}`, error);
             gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'delete',
                 key,
@@ -266,7 +279,7 @@ async function verifyGunWrite(data, key, msg, eve) {
     }
 
     if (!data.signature || !data.author) {
-        console.warn('SEA: Write rejected: Missing signature or author for key:', key);
+        console.warn(`SEA: Write rejected: Missing signature or author for key: ${key}`);
         gun.get('securityLogs').get(did).get(Date.now()).put({
             action: 'write',
             key,
@@ -289,7 +302,7 @@ async function verifyGunWrite(data, key, msg, eve) {
         const verified = await SEA.verify(data.signature, publicKey, JSON.stringify(dataToVerify));
 
         if (!verified) {
-            console.error('SEA: Write rejected: Invalid signature for key:', key);
+            console.error(`SEA: Write rejected: Invalid signature for key: ${key}`);
             gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'write',
                 key,
@@ -301,7 +314,7 @@ async function verifyGunWrite(data, key, msg, eve) {
 
         const now = Date.now();
         if (Math.abs(now - data.timestamp) > 30 * 60 * 1000) {
-            console.error('SEA: Write rejected: Signature timestamp too old for key:', key);
+            console.error(`SEA: Write rejected: Signature timestamp too old for key: ${key}`);
             gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'write',
                 key,
@@ -314,16 +327,13 @@ async function verifyGunWrite(data, key, msg, eve) {
         const versionKey = `${key}/versions/${data.timestamp}`;
         gun.get(versionKey).put(data, (ack) => {
             if (ack.err) {
-                console.error('Failed to store version for key:', versionKey, ack.err);
-            } else {
-                console.log('Stored version for key:', versionKey);
+                console.error(`Failed to store version for key: ${versionKey}`, ack.err);
             }
         });
 
-        console.log('SEA: Write verified for key:', key);
         return true;
     } catch (error) {
-        console.error('SEA: Verification failed for key:', key, error);
+        console.error(`SEA: Verification failed for key: ${key}`, error);
         gun.get('securityLogs').get(did).get(Date.now()).put({
             action: 'write',
             key,
@@ -430,7 +440,8 @@ const ensureServerPeer = () => {
     });
 };
 
-// Periodically update server peer's lastConnection
+// Periodically update server peer's lastConnection with throttled logging
+let serverPeerUpdateCount = 0;
 setInterval(() => {
     const now = Date.now();
     gun.get('knownPeers').get(peerId).put({
@@ -438,15 +449,17 @@ setInterval(() => {
         timestamp: now,
         lastConnection: now,
     }, (ack) => {
+        serverPeerUpdateCount++;
         if (ack.err) {
-            console.error('Failed to update server peer lastConnection:', ack.err);
-        } else {
+            console.error(`Failed to update server peer lastConnection: ${ack.err}`);
+        } else if (serverPeerUpdateCount % 10 === 0 || throttleLog('server_peer_update', 3600000)) {
             console.log(`Updated server peer lastConnection: ${peerId}`);
         }
     });
 }, 5 * 60 * 1000); // Every 5 minutes
 
-// Update lastConnection for incoming peer connections
+// Update lastConnection for incoming peer connections with throttled logging
+let peerConnectionCount = new Map();
 gun.on('hi', (peer) => {
     if (peer.url) {
         console.log('Connected to peer:', peer.url);
@@ -459,9 +472,11 @@ gun.on('hi', (peer) => {
                 lastConnection: now,
             };
             gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
+                const count = (peerConnectionCount.get(peerId) || 0) + 1;
+                peerConnectionCount.set(peerId, count);
                 if (ack.err) {
                     console.error(`Failed to update lastConnection for peer ${peerId}:`, ack.err);
-                } else {
+                } else if (count % 10 === 0 || throttleLog(`peer_${peerId}_update`, 3600000)) {
                     console.log(`Updated lastConnection for peer: ${peerId}, URL: ${peer.url}`);
                 }
             });
@@ -474,13 +489,10 @@ const profileCache = new Map();
 async function getProfileWithRetries(did, retries = 5, delay = 100) {
     const startTime = Date.now();
     if (profileCache.has(did)) {
-        const endTime = Date.now();
-        console.log(`Profile fetch for DID: ${did} (cached) took ${endTime - startTime}ms`);
         return profileCache.get(did);
     }
 
     for (let attempt = 1; attempt <= retries; attempt++) {
-        const attemptStartTime = Date.now();
         const profile = await new Promise((resolve) => {
             gun.get('profiles').get(did).once((data) => {
                 if (data && data.handle) {
@@ -503,14 +515,9 @@ async function getProfileWithRetries(did, retries = 5, delay = 100) {
             });
         });
 
-        const attemptEndTime = Date.now();
-        console.log(`Profile fetch attempt ${attempt}/${retries} for DID: ${did} took ${attemptEndTime - attemptStartTime}ms`);
-
         if (profile) {
             profileCache.set(did, profile);
             setTimeout(() => profileCache.delete(did), 5 * 60 * 1000);
-            const endTime = Date.now();
-            console.log(`Profile fetch for DID: ${did} (successful) took ${endTime - startTime}ms`);
             return profile;
         }
 
@@ -519,8 +526,6 @@ async function getProfileWithRetries(did, retries = 5, delay = 100) {
     }
 
     console.error('Failed to load profile for DID after retries:', did);
-    const endTime = Date.now();
-    console.log(`Profile fetch for DID: ${did} (failed) took ${endTime - startTime}ms`);
     return { handle: 'Unknown' };
 }
 
@@ -588,8 +593,6 @@ app.get('/api/debug/annotations', async (req, res) => {
 
     try {
         const normalizedUrl = normalizeUrl(url);
-        console.log('Debug - Normalized URL:', normalizedUrl);
-
         const { domainShard, subShard } = getShardKey(normalizedUrl);
         const annotationNodes = [
             gun.get(domainShard).get(normalizedUrl),
@@ -619,7 +622,6 @@ app.get('/api/debug/annotations', async (req, res) => {
                             const totalNodes = annotationNodes.length;
 
                             const timeout = setTimeout(() => {
-                                console.log(`Debug fetch comments for annotation ${annotationId} timed out after 500ms`);
                                 nodesProcessed = totalNodes;
                                 resolve({ annotation: annotationData.annotation, comments });
                             }, 500);
@@ -702,15 +704,11 @@ const annotationCache = new Map();
 
 app.get('/api/annotations', async (req, res) => {
     const totalStartTime = Date.now();
-    console.log(`[Timing] Starting /api/annotations request at ${new Date().toISOString()}`);
-
     const url = req.query.url;
     const annotationId = req.query.annotationId;
 
     if (!url) {
         console.log(`[Timing] Request failed: Missing url parameter`);
-        const endTime = Date.now();
-        console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
@@ -719,37 +717,31 @@ app.get('/api/annotations', async (req, res) => {
         profileCache.clear();
         annotationCache.clear();
         const cacheClearEnd = Date.now();
-        console.log(`[Timing] Cleared profile and annotation caches in ${cacheClearEnd - cacheClearStart}ms`);
+        if (throttleLog('cache_clear', 3600000)) {
+            console.log(`[Timing] Cleared caches in ${cacheClearEnd - cacheClearStart}ms`);
+        }
 
         const normalizedUrl = normalizeUrl(url);
-        console.log('Normalized URL for query:', normalizedUrl);
-
         const { domainShard, subShard } = getShardKey(normalizedUrl);
-        console.log(`Querying shards for URL: ${normalizedUrl}, domainShard: ${domainShard}, subShard: ${subShard}`);
         const annotationNodes = [
             gun.get(domainShard).get(normalizedUrl),
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
         ];
 
-        const fetchAnnotationsStart = Date.now();
         const annotations = [];
         const loadedAnnotations = new Set();
         const maxWaitTime = 5000;
 
-        const fetchPromise = new Promise((resolve) => {
+        await new Promise((resolve) => {
             const onAnnotation = (annotation, key) => {
                 if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
-                    console.log(`Skipped non-annotation node for URL: ${normalizedUrl}, Key: ${key}, Data:`, annotation);
                     return;
                 }
                 const cacheKey = `${normalizedUrl}:${annotation.id}`;
-                console.log(`Processing annotation for URL: ${normalizedUrl}, ID: ${annotation.id}, CacheKey: ${cacheKey}`);
                 if (loadedAnnotations.has(annotation.id) || annotationCache.has(cacheKey)) {
-                    console.log(`Skipped duplicate annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
                     return;
                 }
                 if (annotation.isDeleted) {
-                    console.log(`Skipped deleted annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
                     return;
                 }
                 loadedAnnotations.add(annotation.id);
@@ -763,7 +755,6 @@ app.get('/api/annotations', async (req, res) => {
                     screenshot: annotation.screenshot,
                     metadata: annotation.metadata || {},
                 });
-                console.log(`Loaded annotation for URL: ${normalizedUrl}, ID: ${annotation.id}`);
             };
 
             annotationNodes.forEach(node => {
@@ -772,88 +763,40 @@ app.get('/api/annotations', async (req, res) => {
 
             setTimeout(() => {
                 annotationNodes.forEach(node => node.map().off());
-                console.log(`Finished fetching annotations for URL: ${normalizedUrl}, Total annotations: ${annotations.length}`);
-                resolve(annotations);
+                resolve();
             }, maxWaitTime);
         });
 
-        await fetchPromise;
-        const fetchAnnotationsEnd = Date.now();
-        console.log(`[Timing] Total fetch annotations time: ${fetchAnnotationsEnd - fetchAnnotationsStart}ms`);
-
-        if (!annotations || annotations.length === 0) {
-            console.log(`No valid annotations found for URL: ${normalizedUrl} after waiting ${maxWaitTime}ms`);
-            const endTime = Date.now();
-            console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
+        if (!annotations.length) {
             return res.status(404).json({ error: 'No annotations found for this URL' });
         }
 
         annotations.sort((a, b) => b.timestamp - a.timestamp);
-        console.log(`Sorted annotations by timestamp (newest first), Total annotations: ${annotations.length}`);
 
         const annotationsWithDetails = await Promise.all(
             annotations.map(async (annotation) => {
-                const profileStartTime = Date.now();
                 const profile = await getProfileWithRetries(annotation.author);
-                const profileEndTime = Date.now();
-                console.log(`[Timing] Profile fetch for annotation author ${annotation.author} took ${profileEndTime - profileStartTime}ms`);
-
-                const fetchCommentsStart = Date.now();
                 const commentsData = await Promise.all(
-                    annotationNodes.map((node, nodeIndex) =>
+                    annotationNodes.map((node) =>
                         new Promise((resolve) => {
                             const commentList = [];
                             const commentIds = new Set();
-                            let commentCount = 0;
-                            let nodesProcessed = 0;
-                            const totalNodes = annotationNodes.length;
-
-                            const timeout = setTimeout(() => {
-                                console.log(`Fetch comments for annotation ${annotation.id} timed out after 500ms with ${commentList.length} comments`);
-                                resolve(commentList);
-                            }, 500);
-
-                            console.log(`Fetching comments for annotation ${annotation.id} from node: ${node._.get}`);
                             node.get(annotationId).get('comments').map().once((comment, commentId) => {
-                                console.log(`Found comment for annotation ${annotation.id}, Comment ID: ${commentId}, Data:`, comment);
                                 if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
                                     commentIds.add(commentId);
-                                    if (!('isDeleted' in comment)) {
-                                        console.warn(`Comment missing isDeleted field for annotation ${annotation.id}, Comment ID: ${commentId}`);
-                                        comment.isDeleted = false;
-                                    }
                                     commentList.push({
                                         id: commentId,
                                         content: comment.content,
                                         author: comment.author,
                                         timestamp: comment.timestamp,
-                                        isDeleted: comment.isDeleted,
-                                        nodeIndex,
+                                        isDeleted: comment.isDeleted || false,
                                     });
-                                    commentCount++;
-                                } else if (!comment) {
-                                    console.warn(`Encountered null or undefined comment for annotation ${annotation.id}, Comment ID: ${commentId}`);
-                                } else {
-                                    console.warn(`Skipping invalid comment for annotation ${annotation.id}, Comment ID: ${commentId}`, comment);
-                                }
-                                nodesProcessed++;
-                                if (nodesProcessed === totalNodes) {
-                                    console.log(`Finished fetching comments for node ${node._.get}: ${commentCount} comments found`);
                                 }
                             });
-
-                            setTimeout(() => {
-                                if (nodesProcessed === totalNodes && commentCount === 0) {
-                                    console.log(`No comments found for annotation ${annotation.id} in node: ${node._.get}`);
-                                    clearTimeout(timeout);
-                                    resolve(commentList);
-                                }
-                            }, 200);
+                            setTimeout(() => resolve(commentList), 500);
                         })
                     )
                 );
-                const fetchCommentsEnd = Date.now();
-                console.log(`[Timing] Fetch comments for annotation ${annotation.id} took ${fetchCommentsEnd - fetchCommentsStart}ms`);
 
                 const flattenedComments = [];
                 const seenCommentIds = new Set();
@@ -866,50 +809,17 @@ app.get('/api/annotations', async (req, res) => {
                     }
                 }
 
-                let resolvedComments = [];
-                if (flattenedComments.length > 0) {
-                    const consistencyCheckStart = Date.now();
-
-                    const commentsById = new Map();
-                    for (const comment of flattenedComments) {
-                        if (!commentsById.has(comment.id)) {
-                            commentsById.set(comment.id, []);
-                        }
-                        commentsById.get(comment.id).push(comment);
-                    }
-
-                    resolvedComments = [];
-                    const resolvedCommentIds = new Set();
-                    for (const [commentId, commentInstances] of commentsById.entries()) {
-                        if (resolvedCommentIds.has(commentId)) continue;
-                        resolvedCommentIds.add(commentId);
-
-                        let isDeleted = true;
-                        const statesList = commentInstances.map(c => c.isDeleted);
-                        console.log(`Consistency check for comment ${commentId}: States across nodes:`, statesList);
-
-                        for (const state of statesList) {
-                            if (state === false) {
-                                isDeleted = false;
-                                break;
-                            }
-                        }
-
-                        if (!isDeleted) {
-                            console.log(`Including comment ${commentId} as it is not deleted in at least one node`);
-                            resolvedComments.push(commentInstances[0]);
-                        } else {
-                            console.log(`Excluding comment ${commentId} as it is marked as deleted in all nodes`);
+                const resolvedComments = [];
+                const resolvedCommentIds = new Set();
+                for (const comment of flattenedComments) {
+                    if (!resolvedCommentIds.has(comment.id)) {
+                        resolvedCommentIds.add(comment.id);
+                        if (!comment.isDeleted) {
+                            resolvedComments.push(comment);
                         }
                     }
-
-                    const consistencyCheckEnd = Date.now();
-                    console.log(`[Timing] Consistency check for annotation ${annotation.id} took ${consistencyCheckEnd - consistencyCheckStart}ms`);
-                } else {
-                    console.log(`[Timing] Skipped consistency check for annotation ${annotation.id} (no comments to process)`);
                 }
 
-                const fetchCommentProfilesStart = Date.now();
                 const commentsWithAuthors = await Promise.all(
                     resolvedComments.map(async (comment) => {
                         const commentProfile = await getProfileWithRetries(comment.author);
@@ -919,15 +829,10 @@ app.get('/api/annotations', async (req, res) => {
                         };
                     })
                 );
-                const fetchCommentProfilesEnd = Date.now();
-                console.log(`[Timing] Fetch comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
 
                 let metadata;
                 if (!annotation.screenshot) {
-                    const metadataStart = Date.now();
                     metadata = await fetchPageMetadata(normalizedUrl);
-                    const metadataEnd = Date.now();
-                    console.log(`[Timing] Fetch metadata for URL ${normalizedUrl} took ${metadataEnd - metadataStart}ms`);
                 }
 
                 return {
@@ -940,32 +845,27 @@ app.get('/api/annotations', async (req, res) => {
             })
         );
 
-        const replicationStart = Date.now();
         await Promise.all(
             annotationNodes.map(node =>
                 new Promise((resolve) => {
                     node.put({ replicationMarker: Date.now() }, (ack) => {
                         if (ack.err) {
                             console.error(`Failed to force replication for node: ${node._.get}, URL: ${normalizedUrl}, Error:`, ack.err);
-                        } else {
-                            console.log(`Forced replication for node: ${node._.get}, URL: ${normalizedUrl}`);
                         }
                         resolve();
                     });
                 })
             )
         );
-        const replicationEnd = Date.now();
-        console.log(`[Timing] Write replication marker took ${replicationEnd - replicationStart}ms`);
 
         const endTime = Date.now();
-        console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
+        if (throttleLog('annotations_timing', 3600000)) {
+            console.log(`[Timing] Total request time: ${endTime - totalStartTime}ms`);
+        }
 
         res.json({ annotations: annotationsWithDetails });
     } catch (error) {
         console.error('Error fetching annotations:', error);
-        const endTime = Date.now();
-        console.log(`[Timing] Total request time (with error): ${endTime - totalStartTime}ms`);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
