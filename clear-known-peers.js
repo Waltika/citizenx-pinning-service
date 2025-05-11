@@ -56,26 +56,61 @@ async function clearKnownPeers() {
         process.exit(1);
     }
 
-    // Pre-cleanup write test
+    // Pre-cleanup write test with retries
     console.log('Performing pre-cleanup write test...');
-    try {
-        await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Timeout during pre-cleanup write test'));
-            }, 10000);
-            gun.get('test').put({ ping: Date.now() }, (ack) => {
-                clearTimeout(timeout);
-                if (ack.err) {
-                    reject(new Error(`Pre-cleanup write test failed: ${ack.err}`));
-                } else {
-                    console.log('Pre-cleanup write test successful');
-                    resolve();
-                }
+    const maxTestRetries = 3;
+    let testAttempt = 0;
+    let testSuccess = false;
+
+    while (testAttempt < maxTestRetries && !testSuccess) {
+        testAttempt++;
+        console.log(`Write test attempt ${testAttempt} of ${maxTestRetries}...`);
+        try {
+            // Try standard write
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error(`Timeout during pre-cleanup write test (attempt ${testAttempt})`));
+                }, 20000); // Increased to 20 seconds
+                gun.get('test').put({ ping: Date.now() }, (ack) => {
+                    clearTimeout(timeout);
+                    if (ack.err) {
+                        reject(new Error(`Pre-cleanup write test failed: ${ack.err}`));
+                    } else {
+                        console.log('Pre-cleanup write test successful (standard write)');
+                        testSuccess = true;
+                        resolve();
+                    }
+                });
             });
-        });
-    } catch (error) {
-        console.error('Pre-cleanup write test failed:', error.message);
-        process.exit(1);
+        } catch (error) {
+            console.error(`Pre-cleanup write test failed (standard write, attempt ${testAttempt}):`, error.message);
+            // Fallback to put(null)
+            console.log(`Trying fallback write with put(null) (attempt ${testAttempt})...`);
+            try {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error(`Timeout during fallback pre-cleanup write test (attempt ${testAttempt})`));
+                    }, 20000);
+                    gun.get('test').put(null, (ack) => {
+                        clearTimeout(timeout);
+                        if (ack.err) {
+                            reject(new Error(`Fallback pre-cleanup write test failed: ${ack.err}`));
+                        } else {
+                            console.log('Pre-cleanup write test successful (fallback put(null))');
+                            testSuccess = true;
+                            resolve();
+                        }
+                    });
+                });
+            } catch (fallbackError) {
+                console.error(`Fallback pre-cleanup write test failed (attempt ${testAttempt}):`, fallbackError.message);
+                if (testAttempt === maxTestRetries) {
+                    console.error('Aborting cleanup due to repeated write test failures.');
+                    process.exit(1);
+                }
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+        }
     }
 
     const maxRetries = 3;
@@ -119,7 +154,7 @@ async function clearKnownPeers() {
                     const timeout = setTimeout(() => {
                         console.error(`Timeout waiting for put(null) acknowledgment: ${id}`);
                         reject(new Error(`Timeout for ${id}`));
-                    }, 30000); // Increased to 30 seconds
+                    }, 30000);
                     gun.get('knownPeers').get(id).put(null, (ack) => {
                         clearTimeout(timeout);
                         if (ack.err) {

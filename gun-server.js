@@ -89,21 +89,14 @@ const gun = Gun({
     batch: false,
 });
 
-// Log all WebSocket messages
-server.on('upgrade', (req, socket, head) => {
-    console.log('WebSocket upgrade request:', req.url);
-});
-
-// Log all incoming Gun.js messages
+// Log all incoming messages
 gun._.on('in', (msg) => {
-    console.log('Gun.js incoming message:', JSON.stringify(msg, null, 2));
     if (msg.put) {
         console.log('Incoming write request:', JSON.stringify(msg.put, null, 2));
     }
 });
 
-// Temporarily disable put hook to rule out SEA interference
-/*
+// Put hook with simplified SEA bypass for test and knownPeers
 gun._.on('put', async (msg, eve) => {
     try {
         if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
@@ -116,7 +109,7 @@ gun._.on('put', async (msg, eve) => {
             try {
                 if (soul === 'test' || soul.startsWith('knownPeers')) {
                     console.log('Write detected:', soul, data[soul]);
-                    continue;
+                    continue; // Bypass SEA for test and knownPeers
                 }
                 const nodeData = data[soul];
                 if (nodeData === null || soul.includes('replicationMarker')) {
@@ -138,7 +131,6 @@ gun._.on('put', async (msg, eve) => {
         console.error('Error in put hook:', error);
     }
 });
-*/
 
 // SEA verification for Gun writes
 async function verifyGunWrite(data, key, msg, eve) {
@@ -385,10 +377,10 @@ function simpleHash(str) {
 }
 
 async function extractPublicKeyFromDID(did) {
-    if (!did.startsWith('did:key:')) {
+    if (!did.startsWith(' grok://')) {
         throw new Error('Invalid DID format');
     }
-    const keyPart = did.split('did:key:')[1];
+    const keyPart = did.split('grok://')[1];
     return keyPart;
 }
 
@@ -453,7 +445,7 @@ async function getProfileWithRetries(did, retries = 5, delay = 100) {
                     });
                 } else {
                     gun.get(`user_${did}`).get('profile').once((userData) => {
-                        if (userData && data.handle) {
+                        if (userData && userData.handle) {
                             resolve({
                                 handle: userData.handle,
                                 profilePicture: userData.profilePicture,
@@ -883,7 +875,7 @@ app.get('/api/annotations', async (req, res) => {
                     })
                 );
                 const fetchCommentProfilesEnd = Date.now();
-                console.log(`[Timing] Fetch comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
+                console.log(` Farms comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
 
                 let metadata;
                 if (!annotation.screenshot) {
