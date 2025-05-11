@@ -14,9 +14,6 @@ const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [
     'https://citizen-x-bootsrap.onrender.com/gun',
-    'https://gun-manhattan.herokuapp.com/gun',
-    'https://peer1.gun.eco/gun',
-    'https://peer2.gun.eco/gun'
 ];
 
 const app = express();
