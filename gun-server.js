@@ -12,7 +12,7 @@ import SEA from 'gun/sea.js';
 
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
-const initialPeers = []; // No self-connection
+const initialPeers = [];
 
 const app = express();
 
@@ -89,54 +89,75 @@ const gun = Gun({
     batch: false,
 });
 
-// Rate limiting per DID
-const rateLimits = new Map();
-const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
-const MAX_ACTIONS_PER_WINDOW = 100;
-
-async function checkRateLimit(did) {
-    const now = Date.now();
-    let record = rateLimits.get(did) || { count: 0, startTime: now };
-
-    if (now - record.startTime > RATE_LIMIT_WINDOW) {
-        record = { count: 0, startTime: now };
+// Log all incoming messages
+gun._.on('in', (msg) => {
+    if (msg.put) {
+        console.log('Incoming write request:', JSON.stringify(msg.put, null, 2));
     }
+});
 
-    if (record.count >= MAX_ACTIONS_PER_WINDOW) {
-        throw new Error('Rate limit exceeded');
-    }
-
-    record.count++;
-    rateLimits.set(did, record);
-    gun.get('rateLimits').get(did).put(record, (ack) => {
-        if (ack.err) {
-            console.error('Failed to update rate limit for DID:', did, ack.err);
+// Put hook with simplified SEA bypass for test and knownPeers
+gun._.on('put', async (msg, eve) => {
+    try {
+        if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
+            console.log('Skipping invalid put request:', msg);
+            return;
         }
-    });
-}
+        console.log('Put hook triggered for souls:', msg.souls);
+        const { souls, data } = msg;
+        for (const soul in data) {
+            try {
+                if (soul === 'test' || soul.startsWith('knownPeers')) {
+                    console.log('Write detected:', soul, data[soul]);
+                    continue; // Bypass SEA for test and knownPeers
+                }
+                const nodeData = data[soul];
+                if (nodeData === null || soul.includes('replicationMarker')) {
+                    console.log('Skipping SEA verification for soul:', soul);
+                    continue;
+                }
+                if (nodeData && typeof nodeData === 'object') {
+                    const verified = await verifyGunWrite(nodeData, soul, msg, eve);
+                    if (!verified) {
+                        console.warn('Write rejected for soul:', soul);
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing soul:', soul, error);
+            }
+        }
+    } catch (error) {
+        console.error('Error in put hook:', error);
+    }
+});
 
 // SEA verification for Gun writes
 async function verifyGunWrite(data, key, msg, eve) {
     console.log(`verifyGunWrite called: key=${key}, data=`, data);
-    if (key.startsWith('knownPeers')) {
+    if (key === 'test' || key.startsWith('knownPeers')) {
         if (data === null) {
-            console.log('SEA: Allowing null write for knownPeers cleanup:', key);
+            console.log('SEA: Allowing null write for test or knownPeers cleanup:', key);
             return true;
         }
-        if (!data || !data.url || !data.timestamp) {
-            console.warn('SEA: Rejecting invalid knownPeers write: Missing url or timestamp:', key);
-            return false;
+        if (key.startsWith('knownPeers')) {
+            if (!data || !data.url || !data.timestamp) {
+                console.warn('SEA: Rejecting invalid knownPeers write: Missing url or timestamp:', key);
+                return false;
+            }
+            const validUrlPattern = /^https:\/\/[a-zA-Z0-9-.]+\.[a-zA-Z]{2,}(:\d+)?\/gun$/;
+            if (!validUrlPattern.test(data.url)) {
+                console.warn('SEA: Rejecting knownPeers write with invalid URL:', data.url);
+                return false;
+            }
+            if (data.url === `${publicUrl}/gun` && key !== peerId) {
+                console.log('SEA: Skipping redundant self-connection for knownPeers:', data.url);
+                return false;
+            }
+            console.log('SEA: Validated knownPeers write:', key, data.url);
+            return true;
         }
-        const validUrlPattern = /^https:\/\/[a-zA-Z0-9-.]+\.[a-zA-Z]{2,}(:\d+)?\/gun$/;
-        if (!validUrlPattern.test(data.url)) {
-            console.warn('SEA: Rejecting knownPeers write with invalid URL:', data.url);
-            return false;
-        }
-        if (data.url === `${publicUrl}/gun` && key !== peerId) {
-            console.log('SEA: Skipping redundant self-connection for knownPeers:', data.url);
-            return false;
-        }
-        console.log('SEA: Validated knownPeers write:', key, data.url);
+        console.log('SEA: Allowing test write:', key);
         return true;
     }
 
@@ -313,41 +334,6 @@ async function verifyGunWrite(data, key, msg, eve) {
     }
 }
 
-// Put hook with error handling and debug logging
-gun._.on('put', async (msg, eve) => {
-    try {
-        if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
-            console.log('Skipping invalid put request:', msg);
-            return;
-        }
-        console.log('Put hook triggered for souls:', msg.souls);
-        const { souls, data } = msg;
-        for (const soul in data) {
-            try {
-                if (soul.startsWith('knownPeers')) {
-                    console.log('knownPeers write detected:', soul, data[soul]);
-                }
-                const nodeData = data[soul];
-                if (nodeData === null || soul.includes('replicationMarker')) {
-                    console.log('Skipping SEA verification for soul:', soul);
-                    continue;
-                }
-                if (nodeData && typeof nodeData === 'object') {
-                    const verified = await verifyGunWrite(nodeData, soul, msg, eve);
-                    if (!verified) {
-                        console.warn('Write rejected for soul:', soul);
-                        return;
-                    }
-                }
-            } catch (error) {
-                console.error('Error processing soul:', soul, error);
-            }
-        }
-    } catch (error) {
-        console.error('Error in put hook:', error);
-    }
-});
-
 const peerId = `${publicUrl}-bootstrap`;
 
 function normalizeUrl(url) {
@@ -391,10 +377,10 @@ function simpleHash(str) {
 }
 
 async function extractPublicKeyFromDID(did) {
-    if (!did.startsWith('did:key:')) {
+    if (!did.startsWith(' grok://')) {
         throw new Error('Invalid DID format');
     }
-    const keyPart = did.split('did:key:')[1];
+    const keyPart = did.split('grok://')[1];
     return keyPart;
 }
 
@@ -889,7 +875,7 @@ app.get('/api/annotations', async (req, res) => {
                     })
                 );
                 const fetchCommentProfilesEnd = Date.now();
-                console.log(`[Timing] Fetch comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
+                console.log(` Farms comment profiles for annotation ${annotation.id} took ${fetchCommentProfilesEnd - fetchCommentProfilesStart}ms`);
 
                 let metadata;
                 if (!annotation.screenshot) {
@@ -944,5 +930,5 @@ console.log(`Public URL: ${publicUrl}/gun`);
 console.log(`Initial peers: ${initialPeers.join(', ')}`);
 
 gun.on('hi', (peer) => {
-    console.log('Connected to peer:', peer.url);
+    console.log('Connected to peer:', peer.url || 'unknown');
 });
