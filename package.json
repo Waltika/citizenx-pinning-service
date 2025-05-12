@@ -6,7 +6,7 @@
   "main": "dist/gun-server.js",
   "scripts": {
     "start": "node dist/gun-server.js",
-    "build": "tsc",
+    "build": "tsc && node scripts/build-web-assets.js",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },

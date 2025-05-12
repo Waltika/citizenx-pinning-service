@@ -1,7 +1,7 @@
 import Gun from 'gun';
 import { normalizeUrl, simpleHash, simpleHashString, type Annotation, type Comment, type Profile } from '@waltika/citizenx-shared';
 import http from 'http';
-import express, {type Request, type Response, type NextFunction, type RequestHandler } from 'express';
+import express, { type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import axios from 'axios';
@@ -10,6 +10,11 @@ import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import * as cheerio from 'cheerio';
 import SEA from 'gun/sea.js';
+import { resolve } from 'path';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const port: number = process.env.PORT ? parseInt(process.env.PORT) : 10000;
 const publicUrl: string = 'https://citizen-x-bootsrap.onrender.com';
@@ -23,6 +28,7 @@ const purify = DOMPurify(window);
 const corsOptions = {
     origin: [
         'https://citizenx.app',
+        'https://your-webflow-site.webflow.io', // Replace with actual Webflow URL
         'chrome-extension://mbmlbbmhjhcmmpbieofegoefkhnbjmbj',
         'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap',
     ],
@@ -31,6 +37,26 @@ const corsOptions = {
     optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
+
+// Serve web version assets
+app.use('/view-annotations', express.static(resolve(__dirname, 'public/view-annotations')));
+
+// Serve view-annotations page with initial data
+app.get('/view-annotations', (req: Request, res: Response) => {
+    const { url, annotationId } = req.query;
+    const normalizedUrl = url ? normalizeUrl(String(url)) : '';
+    try {
+        const html = readFileSync(resolve(__dirname, 'public/view-annotations/index.html'), 'utf-8');
+        const modifiedHtml = html.replace(
+            '</head>',
+            `<script>window.__INITIAL_DATA__ = { url: "${normalizedUrl}", annotationId: "${annotationId || ''}" };</script></head>`
+        );
+        res.send(modifiedHtml);
+    } catch (error) {
+        console.error('Error serving /view-annotations:', error);
+        res.status(500).send('Internal server error');
+    }
+});
 
 const limiter = RateLimit({
     windowMs: 15 * 60 * 1000,
