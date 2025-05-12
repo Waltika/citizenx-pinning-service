@@ -1,0 +1,1172 @@
+Hello wonderful person! :) Thanks for using GUN, please ask for help on http://chat.gun.eco if anything takes you longer than 5min to figure out!
+Connecting to Gun server at https://citizen-x-bootsrap.onrender.com/gun...
+AXE relay enabled!
+Forcing synchronization by writing a dummy value...
+Dumping root nodes...
+0 length key! 
+Multicast on 233.255.255.255:8765
+Outgoing message to server: {
+  "put": {
+    "sync-test": {
+      "_": {
+        "#": "sync-test",
+        ">": {
+          "timestamp": 1746820536744
+        }
+      },
+      "timestamp": 1746820536744
+    }
+  },
+  "ok": {
+    "@": 10
+  },
+  "#": "iLzMUcmih"
+}
+WebSocket connected to peer: {
+  id: 'https://relay.peer.ooo/gun',
+  url: 'https://relay.peer.ooo/gun',
+  retry: 9,
+  wire: <ref *1> WebSocket {
+    _events: [Object: null prototype] {
+      close: [Function],
+      error: [Function],
+      open: [Function],
+      message: [Function]
+    },
+    _eventsCount: 4,
+    _maxListeners: undefined,
+    _binaryType: 'nodebuffer',
+    _closeCode: 1006,
+    _closeFrameReceived: false,
+    _closeFrameSent: false,
+    _closeMessage: '',
+    _closeTimer: null,
+    _extensions: {},
+    _protocol: '',
+    _readyState: 1,
+    _receiver: Receiver {
+      _events: [Object],
+      _writableState: [WritableState],
+      _maxListeners: undefined,
+      _binaryType: 'nodebuffer',
+      _extensions: {},
+      _isServer: false,
+      _maxPayload: 104857600,
+      _bufferedBytes: 0,
+      _buffers: [],
+      _compressed: false,
+      _payloadLength: 0,
+      _mask: undefined,
+      _fragmented: 0,
+      _masked: false,
+      _fin: false,
+      _opcode: 0,
+      _totalPayloadLength: 0,
+      _messageLength: 0,
+      _fragments: [],
+      _state: 0,
+      _loop: false,
+      _eventsCount: 6,
+      [Symbol(shapeMode)]: true,
+      [Symbol(kCapture)]: false,
+      [Symbol(websocket)]: [Circular *1]
+    },
+    _sender: Sender {
+      _extensions: {},
+      _socket: [TLSSocket],
+      _firstFragment: true,
+      _compress: false,
+      _bufferedBytes: 0,
+      _deflating: false,
+      _queue: []
+    },
+    _socket: TLSSocket {
+      _tlsOptions: [Object],
+      _secureEstablished: true,
+      _securePending: false,
+      _newSessionPending: false,
+      _controlReleased: true,
+      secureConnecting: false,
+      _SNICallback: null,
+      servername: 'relay.peer.ooo',
+      alpnProtocol: false,
+      authorized: true,
+      authorizationError: null,
+      encrypted: true,
+      _events: [Object: null prototype],
+      _eventsCount: 6,
+      connecting: false,
+      _hadError: false,
+      _parent: null,
+      _host: 'relay.peer.ooo',
+      _closeAfterHandlingError: false,
+      _readableState: [ReadableState],
+      _writableState: [WritableState],
+      allowHalfOpen: false,
+      _maxListeners: undefined,
+      _sockname: null,
+      _pendingData: null,
+      _pendingEncoding: '',
+      server: undefined,
+      _server: null,
+      ssl: [TLSWrap],
+      _requestCert: true,
+      _rejectUnauthorized: true,
+      parser: null,
+      _httpMessage: null,
+      autoSelectFamilyAttemptedAddresses: [Array],
+      timeout: 0,
+      [Symbol(alpncallback)]: null,
+      [Symbol(res)]: [TLSWrap],
+      [Symbol(verified)]: true,
+      [Symbol(pendingSession)]: null,
+      [Symbol(async_id_symbol)]: 44,
+      [Symbol(kHandle)]: [TLSWrap],
+      [Symbol(lastWriteQueueSize)]: 0,
+      [Symbol(timeout)]: null,
+      [Symbol(kBuffer)]: null,
+      [Symbol(kBufferCb)]: null,
+      [Symbol(kBufferGen)]: null,
+      [Symbol(shapeMode)]: true,
+      [Symbol(kCapture)]: false,
+      [Symbol(kSetNoDelay)]: true,
+      [Symbol(kSetKeepAlive)]: false,
+      [Symbol(kSetKeepAliveInitialDelay)]: 0,
+      [Symbol(kBytesRead)]: 0,
+      [Symbol(kBytesWritten)]: 0,
+      [Symbol(connect-options)]: [Object],
+      [Symbol(websocket)]: [Circular *1]
+    },
+    _bufferedAmount: 0,
+    _isServer: false,
+    _redirects: 0,
+    _url: 'wss://relay.peer.ooo/gun',
+    _req: null,
+    [Symbol(shapeMode)]: false,
+    [Symbol(kCapture)]: false
+  },
+  met: 1746820538045
+}
+WebSocket connected to peer: {
+  id: 'https://gun-manhattan.herokuapp.com/gun',
+  url: 'https://gun-manhattan.herokuapp.com/gun',
+  retry: 9,
+  wire: <ref *1> WebSocket {
+    _events: [Object: null prototype] {
+      close: [Function],
+      error: [Function],
+      open: [Function],
+      message: [Function]
+    },
+    _eventsCount: 4,
+    _maxListeners: undefined,
+    _binaryType: 'nodebuffer',
+    _closeCode: 1006,
+    _closeFrameReceived: false,
+    _closeFrameSent: false,
+    _closeMessage: '',
+    _closeTimer: null,
+    _extensions: {},
+    _protocol: '',
+    _readyState: 1,
+    _receiver: Receiver {
+      _events: [Object],
+      _writableState: [WritableState],
+      _maxListeners: undefined,
+      _binaryType: 'nodebuffer',
+      _extensions: {},
+      _isServer: false,
+      _maxPayload: 104857600,
+      _bufferedBytes: 0,
+      _buffers: [],
+      _compressed: false,
+      _payloadLength: 0,
+      _mask: undefined,
+      _fragmented: 0,
+      _masked: false,
+      _fin: false,
+      _opcode: 0,
+      _totalPayloadLength: 0,
+      _messageLength: 0,
+      _fragments: [],
+      _state: 0,
+      _loop: false,
+      _eventsCount: 6,
+      [Symbol(shapeMode)]: true,
+      [Symbol(kCapture)]: false,
+      [Symbol(websocket)]: [Circular *1]
+    },
+    _sender: Sender {
+      _extensions: {},
+      _socket: [TLSSocket],
+      _firstFragment: true,
+      _compress: false,
+      _bufferedBytes: 0,
+      _deflating: false,
+      _queue: []
+    },
+    _socket: TLSSocket {
+      _tlsOptions: [Object],
+      _secureEstablished: true,
+      _securePending: false,
+      _newSessionPending: false,
+      _controlReleased: true,
+      secureConnecting: false,
+      _SNICallback: null,
+      servername: 'gun-manhattan.herokuapp.com',
+      alpnProtocol: false,
+      authorized: true,
+      authorizationError: null,
+      encrypted: true,
+      _events: [Object: null prototype],
+      _eventsCount: 6,
+      connecting: false,
+      _hadError: false,
+      _parent: null,
+      _host: 'gun-manhattan.herokuapp.com',
+      _closeAfterHandlingError: false,
+      _readableState: [ReadableState],
+      _writableState: [WritableState],
+      allowHalfOpen: false,
+      _maxListeners: undefined,
+      _sockname: null,
+      _pendingData: null,
+      _pendingEncoding: '',
+      server: undefined,
+      _server: null,
+      ssl: [TLSWrap],
+      _requestCert: true,
+      _rejectUnauthorized: true,
+      parser: null,
+      _httpMessage: null,
+      autoSelectFamilyAttemptedAddresses: [Array],
+      timeout: 0,
+      [Symbol(alpncallback)]: null,
+      [Symbol(res)]: [TLSWrap],
+      [Symbol(verified)]: true,
+      [Symbol(pendingSession)]: null,
+      [Symbol(async_id_symbol)]: 38,
+      [Symbol(kHandle)]: [TLSWrap],
+      [Symbol(lastWriteQueueSize)]: 0,
+      [Symbol(timeout)]: null,
+      [Symbol(kBuffer)]: null,
+      [Symbol(kBufferCb)]: null,
+      [Symbol(kBufferGen)]: null,
+      [Symbol(shapeMode)]: true,
+      [Symbol(kCapture)]: false,
+      [Symbol(kSetNoDelay)]: true,
+      [Symbol(kSetKeepAlive)]: false,
+      [Symbol(kSetKeepAliveInitialDelay)]: 0,
+      [Symbol(kBytesRead)]: 0,
+      [Symbol(kBytesWritten)]: 0,
+      [Symbol(connect-options)]: [Object],
+      [Symbol(websocket)]: [Circular *1]
+    },
+    _bufferedAmount: 0,
+    _isServer: false,
+    _redirects: 0,
+    _url: 'wss://gun-manhattan.herokuapp.com/gun',
+    _req: null,
+    [Symbol(shapeMode)]: false,
+    [Symbol(kCapture)]: false
+  },
+  met: 1746820538175
+}
+WebSocket connected to peer: {
+  id: 'https://citizen-x-bootsrap.onrender.com/gun',
+  url: 'https://citizen-x-bootsrap.onrender.com/gun',
+  retry: 9,
+  wire: <ref *1> WebSocket {
+    _events: [Object: null prototype] {
+      close: [Function],
+      error: [Function],
+      open: [Function],
+      message: [Function]
+    },
+    _eventsCount: 4,
+    _maxListeners: undefined,
+    _binaryType: 'nodebuffer',
+    _closeCode: 1006,
+    _closeFrameReceived: false,
+    _closeFrameSent: false,
+    _closeMessage: '',
+    _closeTimer: null,
+    _extensions: {},
+    _protocol: '',
+    _readyState: 1,
+    _receiver: Receiver {
+      _events: [Object],
+      _writableState: [WritableState],
+      _maxListeners: undefined,
+      _binaryType: 'nodebuffer',
+      _extensions: {},
+      _isServer: false,
+      _maxPayload: 104857600,
+      _bufferedBytes: 0,
+      _buffers: [],
+      _compressed: false,
+      _payloadLength: 0,
+      _mask: undefined,
+      _fragmented: 0,
+      _masked: false,
+      _fin: false,
+      _opcode: 0,
+      _totalPayloadLength: 0,
+      _messageLength: 0,
+      _fragments: [],
+      _state: 0,
+      _loop: false,
+      _eventsCount: 6,
+      [Symbol(shapeMode)]: true,
+      [Symbol(kCapture)]: false,
+      [Symbol(websocket)]: [Circular *1]
+    },
+    _sender: Sender {
+      _extensions: {},
+      _socket: [TLSSocket],
+      _firstFragment: true,
+      _compress: false,
+      _bufferedBytes: 0,
+      _deflating: false,
+      _queue: []
+    },
+    _socket: TLSSocket {
+      _tlsOptions: [Object],
+      _secureEstablished: true,
+      _securePending: false,
+      _newSessionPending: false,
+      _controlReleased: true,
+      secureConnecting: false,
+      _SNICallback: null,
+      servername: 'citizen-x-bootsrap.onrender.com',
+      alpnProtocol: false,
+      authorized: true,
+      authorizationError: null,
+      encrypted: true,
+      _events: [Object: null prototype],
+      _eventsCount: 6,
+      connecting: false,
+      _hadError: false,
+      _parent: null,
+      _host: 'citizen-x-bootsrap.onrender.com',
+      _closeAfterHandlingError: false,
+      _readableState: [ReadableState],
+      _writableState: [WritableState],
+      allowHalfOpen: false,
+      _maxListeners: undefined,
+      _sockname: null,
+      _pendingData: null,
+      _pendingEncoding: '',
+      server: undefined,
+      _server: null,
+      ssl: [TLSWrap],
+      _requestCert: true,
+      _rejectUnauthorized: true,
+      parser: null,
+      _httpMessage: null,
+      autoSelectFamilyAttemptedAddresses: [Array],
+      timeout: 0,
+      [Symbol(alpncallback)]: null,
+      [Symbol(res)]: [TLSWrap],
+      [Symbol(verified)]: true,
+      [Symbol(pendingSession)]: null,
+      [Symbol(async_id_symbol)]: 32,
+      [Symbol(kHandle)]: [TLSWrap],
+      [Symbol(lastWriteQueueSize)]: 0,
+      [Symbol(timeout)]: null,
+      [Symbol(kBuffer)]: null,
+      [Symbol(kBufferCb)]: null,
+      [Symbol(kBufferGen)]: null,
+      [Symbol(shapeMode)]: true,
+      [Symbol(kCapture)]: false,
+      [Symbol(kSetNoDelay)]: true,
+      [Symbol(kSetKeepAlive)]: false,
+      [Symbol(kSetKeepAliveInitialDelay)]: 0,
+      [Symbol(kBytesRead)]: 0,
+      [Symbol(kBytesWritten)]: 0,
+      [Symbol(connect-options)]: [Object],
+      [Symbol(websocket)]: [Circular *1]
+    },
+    _bufferedAmount: 0,
+    _isServer: false,
+    _redirects: 0,
+    _url: 'wss://citizen-x-bootsrap.onrender.com/gun',
+    _req: null,
+    [Symbol(shapeMode)]: false,
+    [Symbol(kCapture)]: false
+  },
+  met: 1746820538388
+}
+0 length key! 
+Finished fetching , collected 0 items after minimum wait time
+Fetching profiles...
+Incoming message from server: {
+  "get": {
+    "#": "profiles"
+  },
+  "#": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "get": {
+    "#": "profiles"
+  },
+  "#": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "336l9Rzi1",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "336l9Rzi1",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "i6m9a8SZ0",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "i6m9a8SZ0",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "VvJXjsDZX",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "VvJXjsDZX",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "9Evi6PxPf",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "9Evi6PxPf",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "6yO6QS5VH",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "6yO6QS5VH",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "mZl7utNVf",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "mZl7utNVf",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "oPOjo1Bnq",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "oPOjo1Bnq",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "nCMM49Ncq",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "nCMM49Ncq",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "isrQJdZJF",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "isrQJdZJF",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "KXQvSsDbu",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "KXQvSsDbu",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "6R8QjHoQw",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "6R8QjHoQw",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "z78o0HpGV",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "z78o0HpGV",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "mXa7gzmvc",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "mXa7gzmvc",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "buJ69HXxg",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "buJ69HXxg",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "RhtKj8axN",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "RhtKj8axN",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "xT9R9Mu8W",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "xT9R9Mu8W",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "6Ng1QUWUo",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "6Ng1QUWUo",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "EJ3TdaMIN",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "EJ3TdaMIN",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "BoHG2JXDx",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "BoHG2JXDx",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "76gzgOHQR",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "76gzgOHQR",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "mkrVJSCJ4",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "mkrVJSCJ4",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "fUZF409Ll",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "fUZF409Ll",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "IKAzQyCUp",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "IKAzQyCUp",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "Zd1K9fpLQ",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "Zd1K9fpLQ",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "0bgdQcMOg",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "0bgdQcMOg",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "jX0XdHg0v",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "jX0XdHg0v",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "f0BcG07UN",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "f0BcG07UN",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "CCPTWGDgJ",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "CCPTWGDgJ",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "UePrdhjiA",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "UePrdhjiA",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "2OaqO7jlT",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "2OaqO7jlT",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "ic8MKDTCm",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "ic8MKDTCm",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "aj4mUAyP2",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "aj4mUAyP2",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "fjAGiRP6n",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "fjAGiRP6n",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "iEMGO0Ucs",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "iEMGO0Ucs",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "igzqR8W2V",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "igzqR8W2V",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "zOnjEprUm",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "zOnjEprUm",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "8z85MX1Jk",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "8z85MX1Jk",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "41viSS0Ka",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "41viSS0Ka",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "dIUwey9MT",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "dIUwey9MT",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "hluCiaxpk",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "hluCiaxpk",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "gUibSy6Vo",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "gUibSy6Vo",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "ggkWkvxSS",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "ggkWkvxSS",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "r42eZdzgG",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "r42eZdzgG",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "RUcwIZgzD",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "RUcwIZgzD",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "0QShEHpXC",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "0QShEHpXC",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "UXWxjZnic",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "UXWxjZnic",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "maj1rcxbv",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "maj1rcxbv",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "dfkOxOtsS",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "dfkOxOtsS",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "1kwFdJPze",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "1kwFdJPze",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "aIruaSmOo",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "aIruaSmOo",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "TklZhQLm1",
+  "><": "https://gun-manhattan.herokuapp.com/gun,https://gun-server.6.to/gun",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "TklZhQLm1",
+  "><": "https://gun-manhattan.herokuapp.com/gun,https://gun-server.6.to/gun",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "sxlMXFagD",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "sxlMXFagD",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "JmvBZCOGx",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "JmvBZCOGx",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "4AvIeC7jk",
+  "><": "https://gun-manhattan.herokuapp.com/gun,https://gun-server.6.to/gun",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "4AvIeC7jk",
+  "><": "https://gun-manhattan.herokuapp.com/gun,https://gun-server.6.to/gun",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "wqA3gZeZS",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "wqA3gZeZS",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "clJGKfMdR",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "clJGKfMdR",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "Ki6AiGNoz",
+  "><": "https://gun-manhattan.herokuapp.com/gun,https://gun-server.6.to/gun",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "Ki6AiGNoz",
+  "><": "https://gun-manhattan.herokuapp.com/gun,https://gun-server.6.to/gun",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "7SXvDmdp8",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "7SXvDmdp8",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "TJzSZLX8M",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "TJzSZLX8M",
+  "@": "L14SgaIqA"
+}
+Incoming message from server: {
+  "#": "PEagEbPgu",
+  "@": "L14SgaIqA"
+}
+Outgoing message to server: {
+  "#": "PEagEbPgu",
+  "@": "L14SgaIqA"
+}
+Finished fetching profiles, collected 0 items after minimum wait time
+Fetching legacy profiles...
+Discovering sharded nodes...
+0 length key! 
+0 length key! 
+Finished fetching , collected 0 items after minimum wait time
+Fetching annotations from annotations node...
+Incoming message from server: {
+  "get": {
+    "#": "annotations"
+  },
+  "#": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "get": {
+    "#": "annotations"
+  },
+  "#": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "0lI0h4Pxn",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "0lI0h4Pxn",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "DEKwqeQrX",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "DEKwqeQrX",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "get": {
+    "#": "annotations/https://x.com/DrNeilStone/status/1918363323982332114"
+  },
+  "#": "KhurqwHOz"
+}
+Outgoing message to server: {
+  "get": {
+    "#": "annotations/https://x.com/DrNeilStone/status/1918363323982332114"
+  },
+  "#": "KhurqwHOz"
+}
+Outgoing message to server: {
+  "#": "fCEL6NZRF",
+  "##": -1370149653,
+  "@": "PjTNKMeRA",
+  "FOO": 1,
+  "put": {
+    "annotations": {
+      "_": {
+        "#": "annotations",
+        ">": {
+          "https://x.com/DrNeilStone/status/1918363323982332114": 1746820443826
+        }
+      },
+      "https://x.com/DrNeilStone/status/1918363323982332114": {
+        "#": "annotations/https://x.com/DrNeilStone/status/1918363323982332114"
+      }
+    }
+  }
+}
+Incoming message from server: {
+  "#": "fCEL6NZRF",
+  "##": -1370149653,
+  "@": "PjTNKMeRA",
+  "FOO": 1,
+  "put": {
+    "annotations": {
+      "_": {
+        "#": "annotations",
+        ">": {
+          "https://x.com/DrNeilStone/status/1918363323982332114": 1746820443826
+        }
+      },
+      "https://x.com/DrNeilStone/status/1918363323982332114": {
+        "#": "annotations/https://x.com/DrNeilStone/status/1918363323982332114"
+      }
+    }
+  }
+}
+Outgoing message to server: {
+  "#": "fCEL6NZRF",
+  "##": -1370149653,
+  "@": "PjTNKMeRA",
+  "FOO": 1,
+  "put": {
+    "annotations": {
+      "_": {
+        "#": "annotations",
+        ">": {
+          "https://x.com/DrNeilStone/status/1918363323982332114": 1746820443826
+        }
+      },
+      "https://x.com/DrNeilStone/status/1918363323982332114": {
+        "#": "annotations/https://x.com/DrNeilStone/status/1918363323982332114"
+      }
+    }
+  }
+}
+Incoming message from server: {
+  "#": "xPm0pn69b",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "xPm0pn69b",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "TQokVhxSx",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "TQokVhxSx",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "5Fxt9k2be",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "5Fxt9k2be",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "0e13bHOpW",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "0e13bHOpW",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "JIxjC0j4A",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "JIxjC0j4A",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "TZ1klNVC7",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "TZ1klNVC7",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "xB5OUWtbX",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "xB5OUWtbX",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "ggKfzKtS2",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "ggKfzKtS2",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "mySBhJhil",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "mySBhJhil",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "gbCyZvXQ2",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "gbCyZvXQ2",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "DiCVPUWaR",
+  "@": "KhurqwHOz"
+}
+Outgoing message to server: {
+  "#": "DiCVPUWaR",
+  "@": "KhurqwHOz"
+}
+Incoming message from server: {
+  "#": "4rsr5n05Q",
+  "@": "KhurqwHOz"
+}
+Outgoing message to server: {
+  "#": "4rsr5n05Q",
+  "@": "KhurqwHOz"
+}
+Incoming message from server: {
+  "#": "C3Rueth5f",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "C3Rueth5f",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "C9r6xn1wt",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "C9r6xn1wt",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "LgdQWjFDQ",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "LgdQWjFDQ",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "LOKBon9IX",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "LOKBon9IX",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "adzvlRzWN",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "adzvlRzWN",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "lhWKMCowX",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "lhWKMCowX",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "OjxXTU1SD",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "OjxXTU1SD",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "evHDq737U",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "evHDq737U",
+  "@": "PjTNKMeRA"
+}
+Incoming message from server: {
+  "#": "239sUlJP8",
+  "@": "PjTNKMeRA"
+}
+Outgoing message to server: {
+  "#": "239sUlJP8",
+  "@": "PjTNKMeRA"
+}

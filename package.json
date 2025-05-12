@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "description": "A Node.js pinning service for CitizenX OrbitDB databases",
-  "main": "index.js",
+  "main": "dist/gun-server.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node dist/gun-server.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc --watch"
   },
   "repository": {
     "type": "git",
@@ -28,6 +31,14 @@
     "express-rate-limit": "latest",
     "gun": "^0.2020.1240",
     "js-ipfs": "latest",
-    "jsdom": "latest"
+    "jsdom": "latest",
+    "@waltika/citizenx-shared": "^1.0.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/express": "latest",
+    "@types/cors": "latest",
+    "@types/jsdom": "latest",
+    "@types/node": "^20.17.30"
   }
 }
