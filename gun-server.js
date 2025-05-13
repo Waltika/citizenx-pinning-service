@@ -10,6 +10,24 @@ import { JSDOM } from 'jsdom';
 import * as cheerio from 'cheerio';
 import SEA from 'gun/sea.js';
 
+// src/shared/utils/normalizeUrl.ts
+function normalizeUrl(url) {
+    // Remove duplicate protocols (e.g., https://https://)
+    let cleanUrl = url.replace(/^(https?:\/\/)+/, 'https://');
+    // Remove trailing slashes
+    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    // Remove non-functional parameters (e.g., UTM parameters)
+    const urlObj = new URL(cleanUrl);
+    const params = new URLSearchParams(urlObj.search);
+    for (const key of params.keys()) {
+        if (key.startsWith('utm_')) {
+            params.delete(key);
+        }
+    }
+    urlObj.search = params.toString();
+    return urlObj.toString();
+}
+
 const port = process.env.PORT || 10000;
 const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
 const initialPeers = [];

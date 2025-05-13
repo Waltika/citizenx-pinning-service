@@ -6,7 +6,7 @@
   "main": "dist/gun-server.js",
   "scripts": {
     "start": "node dist/gun-server.js",
-    "build": "tsc && node scripts/build-web-assets.js && mkdir -p public/view-annotations && cp -r node_modules/@waltika/citizenx-shared/dist/web/* public/view-annotations/",
+    "build": "tsc && node scripts/build-web-assets.js && mkdir -p public/view-annotations && cp -r node_modules/@waltika/citizenx-shared/dist/web/* public/view-annotations/ && cp web/index.html public",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },
