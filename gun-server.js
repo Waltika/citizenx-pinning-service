@@ -1,7 +1,6 @@
 import Gun from 'gun';
-import { normalizeUrl, simpleHash, simpleHashString, type Annotation, type Comment, type Profile } from '@waltika/citizenx-shared';
 import http from 'http';
-import express, { type Request, type Response, type NextFunction, type RequestHandler } from 'express';
+import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import axios from 'axios';
@@ -10,15 +9,10 @@ import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import * as cheerio from 'cheerio';
 import SEA from 'gun/sea.js';
-import { resolve } from 'path';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-
-const port: number = process.env.PORT ? parseInt(process.env.PORT) : 10000;
-const publicUrl: string = 'https://citizen-x-bootsrap.onrender.com';
-const initialPeers: string[] = [];
+const port = process.env.PORT || 10000;
+const publicUrl = 'https://citizen-x-bootsrap.onrender.com';
+const initialPeers = [];
 
 const app = express();
 
@@ -28,7 +22,6 @@ const purify = DOMPurify(window);
 const corsOptions = {
     origin: [
         'https://citizenx.app',
-        'https://your-webflow-site.webflow.io', // Replace with actual Webflow URL
         'chrome-extension://mbmlbbmhjhcmmpbieofegoefkhnbjmbj',
         'chrome-extension://klblcgbgljcpamgpmdccefaalnhndjap',
     ],
@@ -38,39 +31,19 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Serve web version assets
-app.use('/view-annotations', express.static(resolve(__dirname, 'public/view-annotations')));
-
-// Serve view-annotations page with initial data
-app.get('/view-annotations', (req: Request, res: Response) => {
-    const { url, annotationId } = req.query;
-    const normalizedUrl = url ? normalizeUrl(String(url)) : '';
-    try {
-        const html = readFileSync(resolve(__dirname, 'public/view-annotations/index.html'), 'utf-8');
-        const modifiedHtml = html.replace(
-            '</head>',
-            `<script>window.__INITIAL_DATA__ = { url: "${normalizedUrl}", annotationId: "${annotationId || ''}" };</script></head>`
-        );
-        res.send(modifiedHtml);
-    } catch (error) {
-        console.error('Error serving /view-annotations:', error);
-        res.status(500).send('Internal server error');
-    }
-});
-
 const limiter = RateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
-    keyGenerator: (req: Request) => req.ip ?? 'unknown',
+    keyGenerator: (req) => req.ip,
     message: 'Too many requests, please try again later.',
 });
 app.use(limiter);
 
 app.use(express.json());
 
-const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
+const sanitizeInput = (req, res, next) => {
     if (req.body) {
-        const sanitizeObject = (obj: any) => {
+        const sanitizeObject = (obj) => {
             for (const key in obj) {
                 if (typeof obj[key] === 'string') {
                     obj[key] = purify.sanitize(obj[key]);
@@ -116,9 +89,9 @@ const gun = Gun({
     batch: false,
 });
 
+// Throttle logging to reduce verbosity
 const logThrottle = new Map();
-
-function throttleLog(message: string, interval = 60000): boolean {
+function throttleLog(message, interval = 60000) {
     const now = Date.now();
     const lastTime = logThrottle.get(message) || 0;
     if (now - lastTime < interval) return false;
@@ -126,7 +99,8 @@ function throttleLog(message: string, interval = 60000): boolean {
     return true;
 }
 
-gun._.on('in', (msg: any) => {
+// Log incoming messages
+gun._.on('in', (msg) => {
     if (msg.put) {
         const souls = Object.keys(msg.put).join(', ');
         if (throttleLog(`write_${souls}`, 60000)) {
@@ -135,7 +109,8 @@ gun._.on('in', (msg: any) => {
     }
 });
 
-(gun as any)._.on('put', async (msg: any, eve: any) => {
+// Put hook with improved logging and null handling
+gun._.on('put', async (msg, eve) => {
     try {
         if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
             if (throttleLog('invalid_put')) {
@@ -149,7 +124,7 @@ gun._.on('in', (msg: any) => {
                 if (soul === 'test' || soul.startsWith('knownPeers')) {
                     if (data[soul] === null) {
                         console.log(`Write detected: ${soul} (cleanup)`);
-                        continue;
+                        continue; // Allow null writes for cleanup
                     } else if (throttleLog(`write_${soul}`, 60000)) {
                         console.log(`Write detected: ${soul}`);
                     }
@@ -178,7 +153,8 @@ gun._.on('in', (msg: any) => {
     }
 });
 
-async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promise<boolean> {
+// SEA verification with minimal logging
+async function verifyGunWrite(data, key, msg, eve) {
     if (key === 'test' || key.startsWith('knownPeers')) {
         if (data === null) {
             console.log(`SEA: Allowing null write for ${key}`);
@@ -226,13 +202,13 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
 
     if (data.isDeleted) {
         const deletionNode = gun.get('deletions').get(key);
-        const deletionData = await new Promise<{ signature?: string; author?: string; timestamp?: number; nonce?: string }>((resolve) => {
+        const deletionData = await new Promise((resolve) => {
             deletionNode.once((d) => resolve(d));
         });
 
         if (!deletionData || !deletionData.signature || !deletionData.author) {
             console.error(`SEA: Deletion rejected: Missing deletion signature for key: ${key}`);
-            gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+            gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'delete',
                 key,
                 error: 'Missing deletion signature',
@@ -243,15 +219,15 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
 
         try {
             const publicKey = await extractPublicKeyFromDID(deletionData.author);
-            const verified = await SEA.verify(JSON.stringify({
+            const verified = await SEA.verify(deletionData.signature, publicKey, JSON.stringify({
                 key,
                 timestamp: deletionData.timestamp,
                 nonce: deletionData.nonce
-            }), publicKey);
+            }));
 
             if (!verified) {
                 console.error(`SEA: Deletion rejected: Invalid signature for key: ${key}`);
-                gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+                gun.get('securityLogs').get(did).get(Date.now()).put({
                     action: 'delete',
                     key,
                     error: 'Invalid deletion signature',
@@ -261,9 +237,9 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
             }
 
             const now = Date.now();
-            if (Math.abs(now - deletionData.timestamp!) > 30 * 60 * 1000) {
+            if (Math.abs(now - deletionData.timestamp) > 30 * 60 * 1000) {
                 console.error(`SEA: Deletion rejected: Signature timestamp too old for key: ${key}`);
-                gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+                gun.get('securityLogs').get(did).get(Date.now()).put({
                     action: 'delete',
                     key,
                     error: 'Signature timestamp too old',
@@ -272,17 +248,17 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
                 return false;
             }
 
-            const isAdmin = await new Promise<boolean>((resolve) => {
+            const isAdmin = await new Promise((resolve) => {
                 gun.get('admins').get(did).once((data) => resolve(!!data));
             });
             const targetNode = gun.get(key.split('/')[0]).get(key.split('/')[1]).get(key.split('/')[2]);
-            const targetData = await new Promise<any>((resolve) => {
+            const targetData = await new Promise((resolve) => {
                 targetNode.once((d) => resolve(d));
             });
 
-            if (!isAdmin && deletionData.author !== targetData?.author) {
+            if (!isAdmin && deletionData.author !== targetData.author) {
                 console.error(`SEA: Deletion rejected: Unauthorized DID for key: ${key}`);
-                gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+                gun.get('securityLogs').get(did).get(Date.now()).put({
                     action: 'delete',
                     key,
                     error: 'Unauthorized DID',
@@ -294,10 +270,10 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
             return true;
         } catch (error) {
             console.error(`SEA: Deletion verification failed for key: ${key}`, error);
-            gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+            gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'delete',
                 key,
-                error: (error as Error).message,
+                error: error.message,
                 timestamp: Date.now()
             });
             return false;
@@ -306,7 +282,7 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
 
     if (!data.signature || !data.author) {
         console.warn(`SEA: Write rejected: Missing signature or author for key: ${key}`);
-        gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+        gun.get('securityLogs').get(did).get(Date.now()).put({
             action: 'write',
             key,
             error: 'Missing signature or author',
@@ -325,11 +301,11 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
             timestamp: data.timestamp,
             nonce: data.nonce
         };
-        const verified = await SEA.verify(JSON.stringify(dataToVerify), publicKey);
+        const verified = await SEA.verify(data.signature, publicKey, JSON.stringify(dataToVerify));
 
         if (!verified) {
             console.error(`SEA: Write rejected: Invalid signature for key: ${key}`);
-            gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+            gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'write',
                 key,
                 error: 'Invalid signature',
@@ -341,7 +317,7 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
         const now = Date.now();
         if (Math.abs(now - data.timestamp) > 30 * 60 * 1000) {
             console.error(`SEA: Write rejected: Signature timestamp too old for key: ${key}`);
-            gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+            gun.get('securityLogs').get(did).get(Date.now()).put({
                 action: 'write',
                 key,
                 error: 'Signature timestamp too old',
@@ -351,8 +327,8 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
         }
 
         const versionKey = `${key}/versions/${data.timestamp}`;
-        gun.get(versionKey).put(data, (ack: any) => {
-            if (ack && 'err' in ack) {
+        gun.get(versionKey).put(data, (ack) => {
+            if (ack.err) {
                 console.error(`Failed to store version for key: ${versionKey}`, ack.err);
             }
         });
@@ -360,21 +336,22 @@ async function verifyGunWrite(data: any, key: string, msg: any, eve: any): Promi
         return true;
     } catch (error) {
         console.error(`SEA: Verification failed for key: ${key}`, error);
-        gun.get('securityLogs').get(did).get(`${Date.now()}`).put({
+        gun.get('securityLogs').get(did).get(Date.now()).put({
             action: 'write',
             key,
-            error: (error as Error).message,
+            error: error.message,
             timestamp: Date.now()
         });
         return false;
     }
 }
 
-const rateLimits = new Map<string, { count: number; startTime: number }>();
+// Rate limiting per DID
+const rateLimits = new Map();
 const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
 const MAX_ACTIONS_PER_WINDOW = 100;
 
-async function checkRateLimit(did: string): Promise<void> {
+async function checkRateLimit(did) {
     const now = Date.now();
     let record = rateLimits.get(did) || { count: 0, startTime: now };
 
@@ -388,8 +365,8 @@ async function checkRateLimit(did: string): Promise<void> {
 
     record.count++;
     rateLimits.set(did, record);
-    gun.get('rateLimits').get(did).put(record, (ack: any) => {
-        if (ack && 'err' in ack) {
+    gun.get('rateLimits').get(did).put(record, (ack) => {
+        if (ack.err) {
             console.error('Failed to update rate limit for DID:', did, ack.err);
         }
     });
@@ -397,7 +374,7 @@ async function checkRateLimit(did: string): Promise<void> {
 
 const peerId = `${publicUrl}-bootstrap`;
 
-function getShardKey(url: string): { domainShard: string; subShard?: string } {
+function getShardKey(url) {
     const normalizedUrl = normalizeUrl(url);
     const urlObj = new URL(normalizedUrl);
     const domain = urlObj.hostname.replace(/\./g, '_');
@@ -413,7 +390,7 @@ function getShardKey(url: string): { domainShard: string; subShard?: string } {
     return { domainShard };
 }
 
-async function extractPublicKeyFromDID(did: string): Promise<string> {
+async function extractPublicKeyFromDID(did) {
     if (!did.startsWith('did:key:')) {
         throw new Error('Invalid DID format');
     }
@@ -431,8 +408,8 @@ const ensureServerPeer = () => {
             timestamp: now,
             lastConnection: now,
         };
-        gun.get('knownPeers').get(peerId).put(peerData, (ack: any) => {
-            if (ack && 'err' in ack) {
+        gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
+            if (ack.err) {
                 console.error('Failed to register server in knownPeers:', ack.err);
             } else {
                 console.log(`Successfully registered server in knownPeers: ${publicUrl}/gun`);
@@ -441,6 +418,7 @@ const ensureServerPeer = () => {
     });
 };
 
+// Periodically update server peer's lastConnection with throttled logging
 let serverPeerUpdateCount = 0;
 setInterval(() => {
     const now = Date.now();
@@ -448,18 +426,19 @@ setInterval(() => {
         url: `${publicUrl}/gun`,
         timestamp: now,
         lastConnection: now,
-    }, (ack: any) => {
+    }, (ack) => {
         serverPeerUpdateCount++;
-        if (ack && 'err' in ack) {
+        if (ack.err) {
             console.error(`Failed to update server peer lastConnection: ${ack.err}`);
         } else if (serverPeerUpdateCount % 10 === 0 || throttleLog('server_peer_update', 3600000)) {
             console.log(`Updated server peer lastConnection: ${peerId}`);
         }
     });
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000); // Every 5 minutes
 
-const peerConnectionCount = new Map<string, number>();
-gun.on('hi', (peer: any) => {
+// Update lastConnection for incoming peer connections with throttled logging
+let peerConnectionCount = new Map();
+gun.on('hi', (peer) => {
     if (peer.url) {
         console.log('Connected to peer:', peer.url);
         const peerId = peer.url.replace(/[^a-zA-Z0-9-]/g, '-') || `peer-${Date.now()}`;
@@ -470,10 +449,10 @@ gun.on('hi', (peer: any) => {
                 timestamp: data?.timestamp || now,
                 lastConnection: now,
             };
-            gun.get('knownPeers').get(peerId).put(peerData, (ack: any) => {
+            gun.get('knownPeers').get(peerId).put(peerData, (ack) => {
                 const count = (peerConnectionCount.get(peerId) || 0) + 1;
                 peerConnectionCount.set(peerId, count);
-                if (ack && 'err' in ack) {
+                if (ack.err) {
                     console.error(`Failed to update lastConnection for peer ${peerId}:`, ack.err);
                 } else if (count % 10 === 0 || throttleLog(`peer_${peerId}_update`, 3600000)) {
                     console.log(`Updated lastConnection for peer: ${peerId}, URL: ${peer.url}`);
@@ -483,20 +462,19 @@ gun.on('hi', (peer: any) => {
     }
 });
 
-const profileCache = new Map<string, Profile>();
+const profileCache = new Map();
 
-async function getProfileWithRetries(did: string, retries: number = 5, delay: number = 100): Promise<Profile | { handle: string }> {
+async function getProfileWithRetries(did, retries = 5, delay = 100) {
     const startTime = Date.now();
     if (profileCache.has(did)) {
-        return profileCache.get(did)!;
+        return profileCache.get(did);
     }
 
     for (let attempt = 1; attempt <= retries; attempt++) {
-        const profile = await new Promise<Profile | null>((resolve) => {
+        const profile = await new Promise((resolve) => {
             gun.get('profiles').get(did).once((data) => {
                 if (data && data.handle) {
                     resolve({
-                        did,
                         handle: data.handle,
                         profilePicture: data.profilePicture,
                     });
@@ -504,7 +482,6 @@ async function getProfileWithRetries(did: string, retries: number = 5, delay: nu
                     gun.get(`user_${did}`).get('profile').once((userData) => {
                         if (userData && userData.handle) {
                             resolve({
-                                did,
                                 handle: userData.handle,
                                 profilePicture: userData.profilePicture,
                             });
@@ -530,16 +507,7 @@ async function getProfileWithRetries(did: string, retries: number = 5, delay: nu
     return { handle: 'Unknown' };
 }
 
-async function fetchPageMetadata(url: string): Promise<{
-    title: string;
-    favicon: string | null;
-    ogTitle: string | null;
-    ogDescription: string | null;
-    ogImage: string | null;
-    twitterTitle: string | null;
-    twitterDescription: string | null;
-    twitterImage: string | null;
-}> {
+async function fetchPageMetadata(url) {
     try {
         const response = await axios.get(url, { timeout: 5000 });
         const cleanHtml = purify.sanitize(response.data);
@@ -548,12 +516,12 @@ async function fetchPageMetadata(url: string): Promise<{
         const metadata = {
             title: $('title').text() || 'Untitled Page',
             favicon: $('link[rel="icon"]').attr('href') || $('link[rel="shortcut icon"]').attr('href') || `${new URL(url).origin}/favicon.ico`,
-            ogTitle: $('meta[property="og:title"]').attr('content') || null,
-            ogDescription: $('meta[property="og:description"]').attr('content') || null,
-            ogImage: $('meta[property="og:image"]').attr('content') || null,
-            twitterTitle: $('meta[name="twitter:title"]').attr('content') || null,
-            twitterDescription: $('meta[name="twitter:description"]').attr('content') || null,
-            twitterImage: $('meta[name="twitter:image"]').attr('content') || null,
+            ogTitle: $('meta[property="og:title"]').attr('content'),
+            ogDescription: $('meta[property="og:description"]').attr('content'),
+            ogImage: $('meta[property="og:image"]').attr('content'),
+            twitterTitle: $('meta[name="twitter:title"]').attr('content'),
+            twitterDescription: $('meta[name="twitter:description"]').attr('content'),
+            twitterImage: $('meta[name="twitter:image"]').attr('content'),
         };
 
         if (metadata.favicon && !metadata.favicon.startsWith('http')) {
@@ -562,7 +530,7 @@ async function fetchPageMetadata(url: string): Promise<{
 
         return metadata;
     } catch (error) {
-        console.error(`Failed to fetch metadata for ${url}:`, (error as Error).message);
+        console.error(`Failed to fetch metadata for ${url}:`, error.message);
         return {
             title: 'Untitled Page',
             favicon: null,
@@ -576,8 +544,8 @@ async function fetchPageMetadata(url: string): Promise<{
     }
 }
 
-app.get('/api/page-metadata', (async (req: Request, res: Response) => {
-    const url = req.query.url as string | undefined;
+app.get('/api/page-metadata', async (req, res) => {
+    const { url } = req.query;
     if (!url || typeof url !== 'string') {
         return res.status(400).json({ error: 'Invalid URL' });
     }
@@ -588,11 +556,11 @@ app.get('/api/page-metadata', (async (req: Request, res: Response) => {
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch metadata' });
     }
-}) as RequestHandler);
+});
 
-app.get('/api/debug/annotations', (async (req: Request, res: Response) => {
-    const url = req.query.url as string | undefined;
-    const annotationId = req.query.annotationId as string | undefined;
+app.get('/api/debug/annotations', async (req, res) => {
+    const url = req.query.url;
+    const annotationId = req.query.annotationId;
 
     if (!url) {
         return res.status(400).json({ error: 'Missing url parameter' });
@@ -612,32 +580,21 @@ app.get('/api/debug/annotations', (async (req: Request, res: Response) => {
         const shardedData = await Promise.all(
             annotationNodes.map((node) =>
                 new Promise((resolve) => {
-                    const annotationData: { annotation?: Annotation } = {};
-                    node.get(annotationId!).once((annotation) => {
+                    const annotationData = {};
+                    node.get(annotationId).once((annotation) => {
                         if (annotation) {
                             annotationData.annotation = {
-                                id: annotationId!,
+                                id: annotationId,
                                 url: annotation.url,
                                 content: annotation.content,
                                 author: annotation.author,
-                                text: annotation.text || '',
                                 timestamp: annotation.timestamp,
-                                comments: [],
                                 isDeleted: annotation.isDeleted || false,
                                 screenshot: annotation.screenshot,
-                                metadata: annotation.metadata || {
-                                    title: '',
-                                    favicon: null,
-                                    ogTitle: null,
-                                    ogDescription: null,
-                                    ogImage: null,
-                                    twitterTitle: null,
-                                    twitterDescription: null,
-                                    twitterImage: null,
-                                },
+                                metadata: annotation.metadata || {},
                             };
 
-                            const comments: Comment[] = [];
+                            const comments = [];
                             const commentIds = new Set();
                             let nodesProcessed = 0;
                             const totalNodes = annotationNodes.length;
@@ -647,12 +604,11 @@ app.get('/api/debug/annotations', (async (req: Request, res: Response) => {
                                 resolve({ annotation: annotationData.annotation, comments });
                             }, 500);
 
-                            node.get(annotationId!).get('comments').map().once((comment, commentId) => {
+                            node.get(annotationId).get('comments').map().once((comment, commentId) => {
                                 if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
                                     commentIds.add(commentId);
                                     comments.push({
                                         id: commentId,
-                                        annotationId: annotationId!,
                                         content: comment.content,
                                         author: comment.author,
                                         timestamp: comment.timestamp,
@@ -689,9 +645,9 @@ app.get('/api/debug/annotations', (async (req: Request, res: Response) => {
         console.error('Error debugging annotations:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-}) as RequestHandler);
+});
 
-app.post('/api/shorten', express.json(), sanitizeInput, (async (req: Request, res: Response) => {
+app.post('/api/shorten', express.json(), sanitizeInput, async (req, res) => {
     const { url } = req.body;
 
     if (!url) {
@@ -717,17 +673,17 @@ app.post('/api/shorten', express.json(), sanitizeInput, (async (req: Request, re
         console.log(`Successfully shortened URL: ${url} to ${shortUrl}`);
         res.json({ shortUrl });
     } catch (error) {
-        console.error('Error shortening URL:', (error as any).response?.data || (error as Error).message);
+        console.error('Error shortening URL:', error.response?.data || error.message);
         res.status(500).json({ error: 'Failed to shorten URL' });
     }
-}) as RequestHandler);
+});
 
-const annotationCache = new Map<string, number>();
+const annotationCache = new Map();
 
-app.get('/api/annotations', (async (req: Request, res: Response) => {
+app.get('/api/annotations', async (req, res) => {
     const totalStartTime = Date.now();
-    const url = req.query.url as string | undefined;
-    const annotationId = req.query.annotationId as string | undefined;
+    const url = req.query.url;
+    const annotationId = req.query.annotationId;
 
     if (!url) {
         console.log(`[Timing] Request failed: Missing url parameter`);
@@ -750,12 +706,12 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
             ...(subShard ? [gun.get(subShard).get(normalizedUrl)] : []),
         ];
 
-        const annotations: (Annotation & { authorHandle?: string; authorProfilePicture?: string; comments: Comment[] })[] = [];
-        const loadedAnnotations = new Set<string>();
+        const annotations = [];
+        const loadedAnnotations = new Set();
         const maxWaitTime = 5000;
 
-        await new Promise<void>((resolve) => {
-            const onAnnotation = (annotation: Annotation | null, key: string) => {
+        await new Promise((resolve) => {
+            const onAnnotation = (annotation, key) => {
                 if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
                     return;
                 }
@@ -773,26 +729,14 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
                     url: annotation.url,
                     content: annotation.content,
                     author: annotation.author,
-                    text: annotation.text || '',
                     timestamp: annotation.timestamp,
-                    comments: [],
-                    isDeleted: annotation.isDeleted || false,
                     screenshot: annotation.screenshot,
-                    metadata: annotation.metadata || {
-                        title: '',
-                        favicon: null,
-                        ogTitle: null,
-                        ogDescription: null,
-                        ogImage: null,
-                        twitterTitle: null,
-                        twitterDescription: null,
-                        twitterImage: null,
-                    },
+                    metadata: annotation.metadata || {},
                 });
             };
 
             annotationNodes.forEach(node => {
-                node.map().on(onAnnotation, { change: true });
+                node.map().on(onAnnotation, { change: true, filter: { isDeleted: false } });
             });
 
             setTimeout(() => {
@@ -812,15 +756,14 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
                 const profile = await getProfileWithRetries(annotation.author);
                 const commentsData = await Promise.all(
                     annotationNodes.map((node) =>
-                        new Promise<Comment[]>((resolve) => {
-                            const commentList: Comment[] = [];
+                        new Promise((resolve) => {
+                            const commentList = [];
                             const commentIds = new Set();
-                            node.get(annotationId!).get('comments').map().once((comment, commentId) => {
+                            node.get(annotationId).get('comments').map().once((comment, commentId) => {
                                 if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
                                     commentIds.add(commentId);
                                     commentList.push({
                                         id: commentId,
-                                        annotationId: annotationId!,
                                         content: comment.content,
                                         author: comment.author,
                                         timestamp: comment.timestamp,
@@ -833,7 +776,7 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
                     )
                 );
 
-                const flattenedComments: Comment[] = [];
+                const flattenedComments = [];
                 const seenCommentIds = new Set();
                 for (const commentList of commentsData) {
                     for (const comment of commentList) {
@@ -844,7 +787,7 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
                     }
                 }
 
-                const resolvedComments: Comment[] = [];
+                const resolvedComments = [];
                 const resolvedCommentIds = new Set();
                 for (const comment of flattenedComments) {
                     if (!resolvedCommentIds.has(comment.id)) {
@@ -865,7 +808,7 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
                     })
                 );
 
-                let metadata = annotation.metadata;
+                let metadata;
                 if (!annotation.screenshot) {
                     metadata = await fetchPageMetadata(normalizedUrl);
                 }
@@ -873,7 +816,7 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
                 return {
                     ...annotation,
                     authorHandle: profile.handle,
-                    authorProfilePicture: 'profilePicture' in profile ? profile.profilePicture : undefined,
+                    authorProfilePicture: profile.profilePicture,
                     comments: commentsWithAuthors,
                     metadata,
                 };
@@ -882,10 +825,10 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
 
         await Promise.all(
             annotationNodes.map(node =>
-                new Promise<void>((resolve) => {
-                    node.put({ replicationMarker: Date.now() }, (ack: any) => {
-                        if (ack && 'err' in ack) {
-                            console.error(`Failed to force replication for node: ${(node as any)._.get}, URL: ${normalizedUrl}, Error:`, ack.err);
+                new Promise((resolve) => {
+                    node.put({ replicationMarker: Date.now() }, (ack) => {
+                        if (ack.err) {
+                            console.error(`Failed to force replication for node: ${node._.get}, URL: ${normalizedUrl}, Error:`, ack.err);
                         }
                         resolve();
                     });
@@ -903,7 +846,7 @@ app.get('/api/annotations', (async (req: Request, res: Response) => {
         console.error('Error fetching annotations:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-}) as RequestHandler);
+});
 
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);

@@ -6,12 +6,18 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true,
+    "skipLibCheck": true, // Changed to true to avoid third-party type issues
     "outDir": "dist",
     "declaration": true,
     "baseUrl": ".",
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM"], // Added DOM for browser APIs
+    "types": ["node", "trusted-types"], // Added trusted-types (optional, can remove types entirely)
+    "paths": {
+      "events": ["node_modules/events"]
+    }
   },
-  "include": ["gun-server.ts"],
+  "include": ["gun-server.ts", "web/**/*", "scripts/**/*", "src/**/*", "types/**/*"],
   "exclude": ["node_modules", "dist", "node_modules/@waltika/citizenx-shared/src"]
 }

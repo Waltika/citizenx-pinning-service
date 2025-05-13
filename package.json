@@ -6,7 +6,7 @@
   "main": "dist/gun-server.js",
   "scripts": {
     "start": "node dist/gun-server.js",
-    "build": "tsc && node scripts/build-web-assets.js",
+    "build": "tsc && node scripts/build-web-assets.js && mkdir -p public/view-annotations && cp -r node_modules/@waltika/citizenx-shared/dist/web/* public/view-annotations/",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },
@@ -20,7 +20,11 @@
     "url": "https://github.com/Waltika/citizenx-pinning-service/issues"
   },
   "homepage": "https://github.com/Waltika/citizenx-pinning-service#readme",
+  "imports": {
+    "*.css": "./css-handler.js"
+  },
   "dependencies": {
+    "@waltika/citizenx-shared": "^1.0.22",
     "@libp2p/interface": "latest",
     "@libp2p/webrtc": "latest",
     "axios": "latest",
@@ -29,16 +33,22 @@
     "dompurify": "latest",
     "express": "latest",
     "express-rate-limit": "latest",
-    "gun": "^0.2020.1240",
+    "gun": "latest",
     "js-ipfs": "latest",
-    "jsdom": "latest",
-    "@waltika/citizenx-shared": "^1.0.5"
+    "jsdom": "^26.1.0",
+    "react": "^19.1.0",
+    "trusted-types": "^2.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "@types/express": "latest",
+    "@types/gun": "latest",
     "@types/cors": "latest",
+    "@types/express": "latest",
     "@types/jsdom": "latest",
-    "@types/node": "^20.17.30"
+    "@types/node": "^20.17.30",
+    "@types/quill": "^2.0.14",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.4",
+    "@types/trusted-types": "^2.0.7",
+    "typescript": "^5.8.3"
   }
 }
