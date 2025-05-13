@@ -47,7 +47,7 @@ export default defineConfig({
         emptyOutDir: true,
         rollupOptions: {
             input: {
-                main: resolve(process.cwd(), 'web/index.tsx'),
+                main: resolve(process.cwd(), 'web/main.tsx'),
             },
             output: {
                 entryFileNames: '[name].js',

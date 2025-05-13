@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node dist/gun-server.js",
     "build": "tsc && node scripts/build-web-assets.js && mkdir -p public/view-annotations && cp -r node_modules/@waltika/citizenx-shared/dist/web/* public/view-annotations/ && cp web/index.html public",
+    "build:web": "vite build --config ./vite.config.web.js",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },
@@ -24,7 +25,6 @@
     "*.css": "./css-handler.js"
   },
   "dependencies": {
-    "@waltika/citizenx-shared": "^1.0.22",
     "@libp2p/interface": "latest",
     "@libp2p/webrtc": "latest",
     "axios": "latest",
@@ -37,6 +37,7 @@
     "js-ipfs": "latest",
     "jsdom": "^26.1.0",
     "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "trusted-types": "^2.0.0"
   },
   "devDependencies": {
@@ -49,6 +50,9 @@
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.4",
     "@types/trusted-types": "^2.0.7",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vite": "^5.4.18",
+    "vite-plugin-svgr": "^4.3.0",
+    "@vitejs/plugin-react": "^4.4.1"
   }
 }
