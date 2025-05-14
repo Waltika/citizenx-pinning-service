@@ -132,7 +132,7 @@ gun._.on('put', async (msg, eve) => {
     try {
         if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
             if (throttleLog('invalid_put')) {
-                console.log('Skipping invalid put request');
+                console.log('Skipping invalid put request', msg);
             }
             return;
         }
