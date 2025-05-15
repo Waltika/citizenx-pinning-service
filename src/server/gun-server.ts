@@ -635,7 +635,6 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
             gun.get(domainShard).get(cleanUrl),
             ...(subShard ? [gun.get(subShard).get(cleanUrl)] : []),
         ];
-        console.log(`[DEBUG] Annotation nodes:`, annotationNodes.map(node => node._.get));
 
         let annotation: any = null;
         await Promise.all(
@@ -677,13 +676,13 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
     <meta property="og:title" content="${title}">
     <meta property="og:description" content="${description}">
     <meta property="og:image" content="${image}">
-    <meta property="og:url" content="${publicUrl}">
+    <meta property="og:url" content="${cleanUrl}">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${title}">
     <meta name="twitter:description" content="${description}">
     <meta name="twitter:image" content="${image}">
-    <link rel="canonical" href="${publicUrl}">
+    <link rel="canonical" href="${cleanUrl}">
 </head>
 <body>
     <script>
@@ -696,12 +695,6 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
                     window.location.href = url;
                 }
             }
-
-            // Detect CitizenX extension
-            window.addEventListener('citizenx-extension-installed', () => {
-                console.log('[DEBUG] Extension detected, redirecting to original URL');
-                redirect('${originalUrl}');
-            }, { once: true });
 
             // Timeout to detect browser and redirect
             setTimeout(() => {
