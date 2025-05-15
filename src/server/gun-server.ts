@@ -666,9 +666,6 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
         const description = `Annotation by ${profile.handle} on ${metadata.title || 'a webpage'}`;
         const image = metadata.ogImage || atob(annotation.screenshot) || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
 
-        const canonicalUrl = `${publicUrl}/viewannotation/${annotationId}/${base64Url}`;
-        console.log(`[DEBUG] Generated meta tags: title=${title}, description=${description}, image=${image}, canonicalUrl=${canonicalUrl}`);
-
         const html = `
 <!DOCTYPE html>
 <html lang="en">
