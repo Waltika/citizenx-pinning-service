@@ -686,7 +686,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
                 const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg|OPR/.test(navigator.userAgent);
                 console.log('[DEBUG] Browser detection: isChrome=', isChrome);
                 if (isChrome) {
-                    redirect('${websiteUrl}/install?annotationId=${annotationId}&url=${base64Url}');
+                    redirect('${websiteUrl}/check-extension?annotationId=${annotationId}&url=${base64Url}');
                 } else {
                     redirect('${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${base64Url}');
                 }
