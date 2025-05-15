@@ -582,27 +582,6 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
     }
 });
 
-function base64toBlob(base64Data: string, contentType: string) {
-    contentType = contentType || '';
-    var sliceSize = 1024;
-    var byteCharacters = atob(base64Data);
-    var bytesLength = byteCharacters.length;
-    var slicesCount = Math.ceil(bytesLength / sliceSize);
-    var byteArrays = new Array(slicesCount);
-
-    for (var sliceIndex = 0; sliceIndex < slicesCount; ++sliceIndex) {
-        var begin = sliceIndex * sliceSize;
-        var end = Math.min(begin + sliceSize, bytesLength);
-
-        var bytes = new Array(end - begin);
-        for (var offset = begin, i = 0; offset < end; ++i, ++offset) {
-            bytes[i] = byteCharacters[offset].charCodeAt(0);
-        }
-        byteArrays[sliceIndex] = new Uint8Array(bytes);
-    }
-    return new Blob(byteArrays, {type: contentType});
-}
-
 // New /viewannotation route with enhanced logging
 app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /viewannotation called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
@@ -663,7 +642,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
         console.log(`[DEBUG] Fetched metadata for url: ${cleanUrl}, metadata:`, metadata);
         const title = annotation.content.length > 100 ? `${annotation.content.slice(0, 97)}...` : annotation.content;
         const description = `Annotation by ${profile.handle} on ${metadata.title || 'a webpage'}`;
-        const image = metadata.ogImage || atob(annotation.screenshot) || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
+        const image = metadata.ogImage || annotation.screenshot || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
 
         const html = `
 <!DOCTYPE html>
