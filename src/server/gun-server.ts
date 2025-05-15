@@ -66,6 +66,7 @@ function simpleHash(str: string): number {
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
 const publicUrl: string = 'https://citizen-x-bootsrap.onrender.com';
+const websiteUrl: string = 'https://citizenx.app';
 const initialPeers: string[] = [];
 
 const app: Express = express();
@@ -685,9 +686,9 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
                 const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg|OPR/.test(navigator.userAgent);
                 console.log('[DEBUG] Browser detection: isChrome=', isChrome);
                 if (isChrome) {
-                    redirect('${publicUrl}/install?annotationId=${annotationId}&url=${base64Url}');
+                    redirect('${websiteUrl}/install?annotationId=${annotationId}&url=${base64Url}');
                 } else {
-                    redirect('${publicUrl}/view-annotations?annotationId=${annotationId}&url=${base64Url}');
+                    redirect('${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${base64Url}');
                 }
             }, 500);
         })();
