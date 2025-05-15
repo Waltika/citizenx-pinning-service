@@ -9,7 +9,6 @@ import { verifyGunWrite } from './utils/verifyGunWrite.js';
 import { limiter, checkRateLimit, PeerData } from './utils/rateLimit.js';
 import { Annotation, Metadata } from './utils/types.js';
 import SEA from 'gun/sea.js';
-import { createHash } from 'crypto';
 
 // Profile cache
 const profileCache = new Map<string, { handle: string; profilePicture?: string }>();
@@ -62,7 +61,7 @@ const annotationCache = new Map<string, number>();
 
 // Simple hash function for sharding
 function simpleHash(str: string): number {
-    return parseInt(createHash('sha256').update(str).digest('hex').slice(0, 8), 16);
+    return parseInt(require('crypto').createHash('sha256').update(str).digest('hex').slice(0, 8), 16);
 }
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
@@ -263,8 +262,8 @@ function getShardKey(url: string): { domainShard: string; subShard?: string } {
 
     const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
     if (highTrafficDomains.includes(domain)) {
-        const hash = require('crypto').createHash('sha256').update(cleanUrl).digest('hex').slice(0, 8);
-        const subShardIndex = parseInt(hash, 16) % 10;
+        const hash = simpleHash(cleanUrl);
+        const subShardIndex = hash % 10;
         return { domainShard, subShard: `${domainShard}_shard_${subShardIndex}` };
     }
 
@@ -568,11 +567,6 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
         console.error('Error shortening URL:', error.response?.data || error.message);
         res.status(500).json({ error: 'Failed to shorten URL' });
     }
-});
-
-// Placeholder for /viewannotation route
-app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Response) => {
-    res.status(501).send('Not implemented yet');
 });
 
 console.log(`Gun server running on port ${port}`);
