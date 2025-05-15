@@ -1,58 +1,43 @@
 {
-  "name": "citizenx-pinning-service",
+  "name": "citizenx",
   "version": "1.0.0",
   "type": "module",
-  "description": "A Node.js pinning service for CitizenX OrbitDB databases",
-  "main": "dist/gun-server.js",
   "scripts": {
-    "start": "node dist/gun-server.js",
-    "build": "tsc && node scripts/build-web-assets.js && mkdir -p public/view-annotations && cp -r node_modules/@waltika/citizenx-shared/dist/web/* public/view-annotations/ && cp web/index.html public",
-    "build:web": "vite build --config ./vite.config.web.js",
-    "typecheck": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "typecheck": "tsc --noEmit --pretty",
+    "build:server": "vite build --config vite.config.server.ts",
+    "start": "node dist/server/gun-server.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "diagnostic": "node scripts/libp2p-diagnostic.js"
+  },
+  "dependencies": {
+    "gun": "^0.2020.1240",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.7",
+    "express-rate-limit": "^6.7.0",
+    "dompurify": "^3.0.6",
+    "jsdom": "^22.1.0",
+    "cheerio": "^1.0.0-rc.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^5.4.18",
+    "@vitejs/plugin-react": "^4.4.1",
+    "vite-tsconfig-paths": "^4.2.1",
+    "jest": "^29.7.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^20.17.30",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/jsdom": "^21.1.6",
+    "@types/cheerio": "^0.22.31",
+    "@types/gun": "^0.9.6",
+    "@types/jest": "^29.5.12",
+    "@types/chrome": "^0.0.269"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Waltika/citizenx-pinning-service.git"
-  },
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/Waltika/citizenx-pinning-service/issues"
-  },
-  "homepage": "https://github.com/Waltika/citizenx-pinning-service#readme",
-  "imports": {
-    "*.css": "./css-handler.js"
-  },
-  "dependencies": {
-    "@libp2p/interface": "latest",
-    "@libp2p/webrtc": "latest",
-    "axios": "latest",
-    "cheerio": "latest",
-    "cors": "latest",
-    "dompurify": "latest",
-    "express": "latest",
-    "express-rate-limit": "latest",
-    "gun": "latest",
-    "js-ipfs": "latest",
-    "jsdom": "^26.1.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "trusted-types": "^2.0.0"
-  },
-  "devDependencies": {
-    "@types/gun": "latest",
-    "@types/cors": "latest",
-    "@types/express": "latest",
-    "@types/jsdom": "latest",
-    "@types/node": "^20.17.30",
-    "@types/quill": "^2.0.14",
-    "@types/react": "^19.1.4",
-    "@types/react-dom": "^19.1.4",
-    "@types/trusted-types": "^2.0.7",
-    "typescript": "^5.8.3",
-    "vite": "^5.4.18",
-    "vite-plugin-svgr": "^4.3.0",
-    "@vitejs/plugin-react": "^4.4.1"
+    "url": "git+https://github.com/Waltika/CitizenX.git"
   }
 }

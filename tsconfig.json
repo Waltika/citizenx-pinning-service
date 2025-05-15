@@ -1,23 +1,29 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true, // Changed to true to avoid third-party type issues
-    "outDir": "dist",
-    "declaration": true,
-    "baseUrl": ".",
-    "verbatimModuleSyntax": true,
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
     "jsx": "react-jsx",
-    "lib": ["ESNext", "DOM"], // Added DOM for browser APIs
-    "types": ["node", "trusted-types"], // Added trusted-types (optional, can remove types entirely)
+    "esModuleInterop": true,
+    "strict": true,
+    "baseUrl": "src",
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ],
     "paths": {
-      "events": ["node_modules/events"]
+      "@/*": ["*"],
+      "@orbitdb/core": ["types/orbitdb-core"]
     }
   },
-  "include": ["gun-server.ts", "web/**/*", "scripts/**/*", "src/**/*", "types/**/*"],
-  "exclude": ["node_modules", "dist", "node_modules/@waltika/citizenx-shared/src"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    "jest.setup.js",
+    "src/server/**/*.ts",
+    "src/server/**/*.js",
+    "src/types/**/*.ts",
+    "src/types/**/*.js"
+  ],
+  "exclude": ["node_modules", "dist"]
 }
