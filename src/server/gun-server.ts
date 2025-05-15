@@ -410,8 +410,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
         const image = annotation.screenshot
             ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png`
             : metadata.ogImage || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
-        const canonicalUrl = `${publicUrl}/viewannotation/${annotationId}/${base64Url}`;
-        console.log(`[DEBUG] Generated meta tags: title=${title}, description=${description}, image=${image}, canonicalUrl=${canonicalUrl}`);
+        const canonicalUrl = `${cleanUrl}`;
 
         const html = `
 <!DOCTYPE html>
@@ -455,7 +454,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
                 const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg|OPR/.test(navigator.userAgent);
                 console.log('[DEBUG] Browser detection: isChrome=', isChrome);
                 if (isChrome) {
-                    redirect('${websiteUrl}/install?annotationId=${annotationId}&url=${base64Url}');
+                    redirect('${websiteUrl}/check-extension?annotationId=${annotationId}&url=${base64Url}');
                 } else {
                     redirect('${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${base64Url}');
                 }
