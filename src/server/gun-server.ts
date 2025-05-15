@@ -454,15 +454,17 @@ app.get('/api/page-metadata', async (req: Request, res: Response) => {
 });
 
 app.get('/api/debug/annotations', async (req: Request, res: Response) => {
-    const url = req.query.url as string | undefined;
-    const annotationId = req.query.annotationId as string | undefined;
+    const { url, annotationId } = req.query;
+    console.log(`[DEBUG] /api/debug/annotations called with url: ${url}, annotationId: ${annotationId}`);
 
     if (!url || !annotationId) {
+        console.log(`[DEBUG] Missing url or annotationId: url=${url}, annotationId=${annotationId}`);
         return res.status(400).json({ error: 'Missing url or annotationId parameter' });
     }
 
     try {
-        const { domainShard, subShard } = getShardKey(url);
+        const { domainShard, subShard } = getShardKey(url as string);
+        console.log(`[DEBUG] Sharding: domainShard=${domainShard}, subShard=${subShard}`);
         const annotationNodes = [
             gun.get(domainShard).get(url),
             ...(subShard ? [gun.get(subShard).get(url)] : []),
@@ -472,10 +474,11 @@ app.get('/api/debug/annotations', async (req: Request, res: Response) => {
             annotationNodes.map((node) =>
                 new Promise((resolve) => {
                     const annotationData: { annotation?: Annotation; comments: any[] } = { comments: [] };
-                    node.get(annotationId).once((annotation: any) => {
+                    node.get(annotationId as string).once((annotation: any) => {
+                        console.log(`[DEBUG] Fetched annotation for node: ${node._.get}, annotation:`, annotation);
                         if (annotation) {
                             annotationData.annotation = {
-                                id: annotationId,
+                                id: annotationId as string,
                                 url: annotation.url,
                                 content: annotation.content,
                                 author: annotation.author,
@@ -495,7 +498,8 @@ app.get('/api/debug/annotations', async (req: Request, res: Response) => {
                                 resolve({ annotation: annotationData.annotation, comments });
                             }, 500);
 
-                            node.get(annotationId).get('comments').map().once((comment: any, commentId: string) => {
+                            node.get(annotationId as string).get('comments').map().once((comment: any, commentId: string) => {
+                                console.log(`[DEBUG] Fetched comment for annotationId: ${annotationId}, commentId: ${commentId}, comment:`, comment);
                                 if (comment && comment.id && comment.author && comment.content && !commentIds.has(commentId)) {
                                     commentIds.add(commentId);
                                     comments.push({
@@ -522,6 +526,7 @@ app.get('/api/debug/annotations', async (req: Request, res: Response) => {
                                 }, 100);
                             }
                         } else {
+                            console.log(`[DEBUG] No annotation found for annotationId: ${annotationId}`);
                             resolve(null);
                         }
                     });
@@ -529,11 +534,12 @@ app.get('/api/debug/annotations', async (req: Request, res: Response) => {
             )
         );
 
+        console.log(`[DEBUG] Sharded data response:`, shardedData);
         res.json({
             shardedData: shardedData.filter(data => data !== null),
         });
     } catch (error) {
-        console.error('Error debugging annotations:', error);
+        console.error('[DEBUG] Error in /api/debug/annotations:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -541,7 +547,10 @@ app.get('/api/debug/annotations', async (req: Request, res: Response) => {
 app.post('/api/shorten', async (req: Request, res: Response) => {
     const { url } = req.body;
 
+    console.log(`[DEBUG] /api/shorten called with url: ${url}`);
+
     if (!url) {
+        console.log('[DEBUG] Missing url parameter');
         return res.status(400).json({ error: 'Missing url parameter' });
     }
 
@@ -561,11 +570,138 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
         );
 
         const shortUrl: string = response.data.shortURL;
-        console.log(`Successfully shortened URL: ${url} to ${shortUrl}`);
+        console.log(`[DEBUG] Successfully shortened URL: ${url} to ${shortUrl}`);
         res.json({ shortUrl });
     } catch (error: any) {
-        console.error('Error shortening URL:', error.response?.data || error.message);
+        console.error('[DEBUG] Error shortening URL:', error.response?.data || error.message);
         res.status(500).json({ error: 'Failed to shorten URL' });
+    }
+});
+
+// New /viewannotation route with enhanced logging
+app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Response) => {
+    console.log(`[DEBUG] /viewannotation called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
+    console.log(`[DEBUG] Request headers:`, req.headers);
+    console.log(`[DEBUG] Request query:`, req.query);
+
+    const { annotationId, base64Url } = req.params;
+
+    if (!annotationId || !base64Url) {
+        console.log(`[DEBUG] Missing parameters: annotationId=${annotationId}, base64Url=${base64Url}`);
+        return res.status(400).send('Missing annotationId or base64Url');
+    }
+
+    let originalUrl: string;
+    try {
+        originalUrl = Buffer.from(base64Url, 'base64').toString('utf8');
+        console.log(`[DEBUG] Decoded base64Url to originalUrl: ${originalUrl}`);
+        new URL(originalUrl); // Validate URL
+    } catch (error) {
+        console.error(`[DEBUG] Invalid base64Url: ${base64Url}, error:`, error);
+        return res.status(400).send('Invalid base64Url');
+    }
+
+    try {
+        const cleanUrl = new URL(originalUrl).href;
+        console.log(`[DEBUG] Cleaned URL: ${cleanUrl}`);
+        const { domainShard, subShard } = getShardKey(cleanUrl);
+        console.log(`[DEBUG] Sharding: domainShard=${domainShard}, subShard=${subShard}`);
+        const annotationNodes = [
+            gun.get(domainShard).get(cleanUrl),
+            ...(subShard ? [gun.get(subShard).get(cleanUrl)] : []),
+        ];
+        console.log(`[DEBUG] Annotation nodes:`, annotationNodes.map(node => node._.get));
+
+        let annotation: any = null;
+        await Promise.all(
+            annotationNodes.map(node =>
+                new Promise<void>((resolve) => {
+                    node.get(annotationId).once((data: any) => {
+                        console.log(`[DEBUG] Fetched annotation for node: ${node._.get}, annotationId: ${annotationId}, data:`, data);
+                        if (data && !data.isDeleted) {
+                            annotation = data;
+                        }
+                        resolve();
+                    });
+                })
+            )
+        );
+
+        if (!annotation) {
+            console.log(`[DEBUG] No annotation found for annotationId: ${annotationId}, url: ${cleanUrl}`);
+            return res.status(404).send('Annotation not found');
+        }
+
+        console.log(`[DEBUG] Annotation found:`, annotation);
+        const profile = await getProfileWithRetries(annotation.author);
+        console.log(`[DEBUG] Fetched profile for author: ${annotation.author}, profile:`, profile);
+        let metadata: Metadata = await fetchPageMetadata(cleanUrl);
+        console.log(`[DEBUG] Fetched metadata for url: ${cleanUrl}, metadata:`, metadata);
+        const title = annotation.content.length > 100 ? `${annotation.content.slice(0, 97)}...` : annotation.content;
+        const description = `Annotation by ${profile.handle} on ${metadata.title || 'a webpage'}`;
+        const image = annotation.screenshot || metadata.ogImage || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
+        const canonicalUrl = `${publicUrl}/viewannotation/${annotationId}/${base64Url}`;
+        console.log(`[DEBUG] Generated meta tags: title=${title}, description=${description}, image=${image}, canonicalUrl=${canonicalUrl}`);
+
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <meta name="description" content="${description}">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${image}">
+    <meta property="og:url" content="${canonicalUrl}">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="${title}">
+    <meta name="twitter:description" content="${description}">
+    <meta name="twitter:image" content="${image}">
+    <link rel="canonical" href="${canonicalUrl}">
+</head>
+<body>
+    <script>
+        (function() {
+            let redirectHandled = false;
+            function redirect(url) {
+                console.log('[DEBUG] Redirecting to:', url);
+                if (!redirectHandled) {
+                    redirectHandled = true;
+                    window.location.href = url;
+                }
+            }
+
+            // Detect CitizenX extension
+            window.addEventListener('citizenx-extension-installed', () => {
+                console.log('[DEBUG] Extension detected, redirecting to original URL');
+                redirect('${originalUrl}');
+            }, { once: true });
+
+            // Timeout to detect browser and redirect
+            setTimeout(() => {
+                const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg|OPR/.test(navigator.userAgent);
+                console.log('[DEBUG] Browser detection: isChrome=', isChrome);
+                if (isChrome) {
+                    redirect('${publicUrl}/install?annotationId=${annotationId}&url=${base64Url}');
+                } else {
+                    redirect('${publicUrl}/view-annotations?annotationId=${annotationId}&url=${base64Url}');
+                }
+            }, 500);
+        })();
+    </script>
+</body>
+</html>
+        `;
+
+        console.log(`[DEBUG] Sending HTML response for /viewannotation`);
+        res.set('Content-Type', 'text/html');
+        res.send(html);
+    } catch (error) {
+        console.error(`[DEBUG] Error in /viewannotation:`, error);
+        res.status(500).send('Internal server error');
     }
 });
 
