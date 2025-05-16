@@ -8,7 +8,8 @@ import {fetchPageMetadata} from './utils/fetchPageMetadata.js';
 import {verifyGunWrite} from './utils/verifyGunWrite.js';
 import {limiter, PeerData} from './utils/rateLimit.js';
 import {Annotation, Metadata} from './utils/types.js';
-import {stripHtml} from "@/server/utils/stripHtml.js";
+import {stripHtml} from "./utils/stripHtml.js";
+import sharp from 'sharp';
 
 // Profile cache
 const profileCache = new Map<string, { handle: string; profilePicture?: string }>();
@@ -306,19 +307,23 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             ...(subShard ? [gun.get(subShard).get(cleanUrl)] : []),
         ];
 
-        let annotation: any = null;
-        await Promise.all(
+        // Collect valid annotations
+        const annotations = await Promise.all(
             annotationNodes.map(node =>
-                new Promise<void>((resolve) => {
+                new Promise<Annotation | null>((resolve) => {
                     node.get(annotationId).once((data: any) => {
-                        if (data && !data.isDeleted) {
-                            annotation = data;
+                        if (data && !data.isDeleted && typeof data.screenshot === 'string') {
+                            resolve(data as Annotation);
+                        } else {
+                            resolve(null);
                         }
-                        resolve();
                     });
                 })
             )
         );
+
+        // Find the first valid annotation
+        const annotation = annotations.find(a => a !== null) || null;
 
         if (!annotation || !annotation.screenshot) {
             console.log(`[DEBUG] No annotation or screenshot found for annotationId: ${annotationId}, url: ${cleanUrl}`);
@@ -336,8 +341,55 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
         const imageBuffer = Buffer.from(base64Match[2], 'base64');
         console.log(`[DEBUG] Decoded image buffer, size: ${imageBuffer.length} bytes`);
 
-        res.set('Content-Type', `image/${base64Match[1]}`);
-        res.send(imageBuffer);
+        // Process image with sharp for Open Graph/Twitter Card (1.91:1 aspect ratio)
+        const targetAspectRatio = 1.91; // 1200x630 -> 1200/630 ≈ 1.91
+        const targetWidth = 1200;
+        const targetHeight = 630;
+
+        try {
+            // Load image metadata to determine dimensions
+            const metadata = await sharp(imageBuffer).metadata();
+            const width = metadata.width || targetWidth;
+            const height = metadata.height || targetHeight;
+            console.log(`[DEBUG] Original image dimensions: ${width}x${height}`);
+
+            // Calculate current aspect ratio
+            const currentAspectRatio = width / height;
+
+            let left: number, top: number, cropWidth: number, cropHeight: number;
+
+            if (currentAspectRatio > targetAspectRatio) {
+                // Image is too wide: crop width
+                cropHeight = height;
+                cropWidth = Math.floor(height * targetAspectRatio);
+                left = Math.floor((width - cropWidth) / 2); // Center horizontally
+                top = 0;
+            } else {
+                // Image is too tall: crop height
+                cropWidth = width;
+                cropHeight = Math.floor(width / targetAspectRatio);
+                left = 0;
+                top = Math.floor((height - cropHeight) / 2); // Center vertically
+            }
+
+            console.log(`[DEBUG] Cropping to ${cropWidth}x${cropHeight} at (${left}, ${top})`);
+
+            // Crop and resize to target dimensions
+            const processedBuffer = await sharp(imageBuffer)
+                .extract({ left, top, width: cropWidth, height: cropHeight })
+                .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
+                .toFormat("png") // Preserve original format (png or jpeg)
+                .toBuffer();
+
+            res.set('Content-Type', `image/${base64Match[1]}`);
+            res.send(processedBuffer);
+            console.log(`[DEBUG] Processed image sent, size: ${processedBuffer.length} bytes`);
+        } catch (sharpError) {
+            console.error(`[DEBUG] Error processing image with sharp:`, sharpError);
+            // Fallback: Send original image if processing fails
+            res.set('Content-Type', `image/${base64Match[1]}`);
+            res.send(imageBuffer);
+        }
     } catch (error) {
         console.error(`[DEBUG] Error in /image:`, error);
         res.status(500).send('Internal server error');
@@ -549,7 +601,6 @@ app.get('/api/debug/annotations', async (req: Request, res: Response) => {
                 new Promise((resolve) => {
                     const annotationData: { annotation?: Annotation; comments: any[] } = {comments: []};
                     node.get(annotationId as string).once((annotation: any) => {
-                        console.log(`[DEBUG] Fetched annotation for node: ${node._.get}, annotation:`, annotation);
                         if (annotation) {
                             annotationData.annotation = {
                                 id: annotationId as string,
