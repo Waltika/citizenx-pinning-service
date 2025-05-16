@@ -369,7 +369,7 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
                 cropWidth = width;
                 cropHeight = Math.floor(width / targetAspectRatio);
                 left = 0;
-                top = Math.floor((height - cropHeight) / 2); // Center vertically
+                top = 0; // Let's not center vertically. Usually the top is more interesting. Especially on tweets.
             }
 
             console.log(`[DEBUG] Cropping to ${cropWidth}x${cropHeight} at (${left}, ${top})`);
