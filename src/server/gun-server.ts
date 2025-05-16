@@ -304,14 +304,12 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             gun.get(domainShard).get(cleanUrl),
             ...(subShard ? [gun.get(subShard).get(cleanUrl)] : []),
         ];
-        console.log(`[DEBUG] Annotation nodes:`, annotationNodes.map(node => node._.get));
 
         let annotation: any = null;
         await Promise.all(
             annotationNodes.map(node =>
                 new Promise<void>((resolve) => {
                     node.get(annotationId).once((data: any) => {
-                        console.log(`[DEBUG] Fetched annotation for node: ${node._.get}, annotationId: ${annotationId}, data:`, data);
                         if (data && !data.isDeleted) {
                             annotation = data;
                         }
