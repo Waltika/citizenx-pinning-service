@@ -8,6 +8,7 @@ import {fetchPageMetadata} from './utils/fetchPageMetadata.js';
 import {verifyGunWrite} from './utils/verifyGunWrite.js';
 import {limiter, PeerData} from './utils/rateLimit.js';
 import {Annotation, Metadata} from './utils/types.js';
+import {stripHtml} from "@/server/utils/stripHtml.js";
 
 // Profile cache
 const profileCache = new Map<string, { handle: string; profilePicture?: string }>();
@@ -710,8 +711,9 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
         console.log(`[DEBUG] Fetched profile for author: ${annotation.author}, profile:`, profile);
         let metadata: Metadata = await fetchPageMetadata(cleanUrl);
         console.log(`[DEBUG] Fetched metadata for url: ${cleanUrl}, metadata:`, metadata);
-        const title = annotation.content.length > 100 ? `${annotation.content.slice(0, 97)}...` : annotation.content;
-        const description = `Annotation by ${profile.handle} on ${metadata.title || 'a webpage'}`;
+        const annotationNoHTML = stripHtml(annotation.content);
+        const description = annotationNoHTML.length > 100 ? `${annotationNoHTML.slice(0, 97)}...` : annotationNoHTML;
+        const title = `Annotation by ${profile.handle} on ${cleanUrl}`;
         const defaultImage = 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
         // Use /image endpoint for screenshot if available, else fallback
         const image = metadata.ogImage
