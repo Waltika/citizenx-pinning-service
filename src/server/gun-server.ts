@@ -60,8 +60,9 @@ async function getProfileWithRetries(did: string, retries: number = 5, delay: nu
     return {handle: 'Unknown'};
 }
 
-// Annotation cache
+// Annotation cache with expiration
 const annotationCache = new Map<string, number>();
+const ANNOTATION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 // Simple hash function for sharding
 function simpleHash(str: string): number {
@@ -120,14 +121,16 @@ const gun: any = (Gun as any)({
     batch: false,
 });
 
-// Throttle logging
+// Throttle logging with expiration
 const logThrottle: Map<string, number> = new Map();
+const LOG_THROTTLE_TTL = 3600000; // 1 hour in milliseconds
 
 function throttleLog(message: string, interval: number = 60000): boolean {
     const now = Date.now();
     const lastTime = logThrottle.get(message) || 0;
     if (now - lastTime < interval) return false;
     logThrottle.set(message, now);
+    setTimeout(() => logThrottle.delete(message), LOG_THROTTLE_TTL);
     return true;
 }
 
@@ -440,6 +443,7 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
                 }
                 loadedAnnotations.add(annotation.id);
                 annotationCache.set(cacheKey, Date.now());
+                setTimeout(() => annotationCache.delete(cacheKey), ANNOTATION_CACHE_TTL); // Expire after 5 minutes
                 annotations.push({
                     id: annotation.id,
                     url: annotation.url,
