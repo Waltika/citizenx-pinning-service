@@ -739,14 +739,13 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
             gun.get(domainShard).get(cleanUrl),
             ...(subShard ? [gun.get(subShard).get(cleanUrl)] : []),
         ];
-        console.log(`[DEBUG] Annotation nodes:`, annotationNodes.map(node => node._.get));
 
         let annotation: any = null;
         await Promise.all(
             annotationNodes.map(node =>
                 new Promise<void>((resolve) => {
                     node.get(annotationId).once((data: any) => {
-                        console.log(`[DEBUG] Fetched annotation for node: ${node._.get}, annotationId: ${annotationId}, data:`, data);
+                        console.log(`[DEBUG] Fetched annotation for annotationId: ${annotationId}, data:`, data);
                         if (data && !data.isDeleted) {
                             annotation = data;
                         }
@@ -761,7 +760,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
             return res.status(404).send('Annotation not found');
         }
 
-        console.log(`[DEBUG] Annotation found:`, annotation);
+        console.log(`[DEBUG] Annotation found:`, annotationId);
         const profile = await getProfileWithRetries(annotation.author);
         console.log(`[DEBUG] Fetched profile for author: ${annotation.author}, profile:`, profile);
         let metadata: Metadata = await fetchPageMetadata(cleanUrl);
@@ -773,7 +772,6 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
         // Use /image endpoint for screenshot if available, else fallback
         const image = metadata.ogImage
             ? metadata.ogImage : annotation.screenshot ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png` : defaultImage;
-        console.log(`[DEBUG] Selected image URL: ${image}`);
 
         const html = `
 <!DOCTYPE html>
