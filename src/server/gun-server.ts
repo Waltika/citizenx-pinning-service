@@ -18,7 +18,7 @@ async function getProfileWithRetries(did: string, retries: number = 5, delay: nu
     handle: string;
     profilePicture?: string
 }> {
-    const startTime = Date.now();
+    Date.now();
     if (profileCache.has(did)) {
         return profileCache.get(did)!;
     }
@@ -78,6 +78,7 @@ const app: Express = express();
 
 app.use(limiter);
 app.use(express.json());
+// noinspection SpellCheckingInspection
 app.use(cors({
     origin: [
         'https://citizenx.app',
@@ -144,11 +145,6 @@ gun._.on('in', (msg: { put?: Record<string, any> }) => {
     }
 });
 
-// Custom type for put hook
-interface PutHookCallback {
-    (msg: { souls?: string; data?: Record<string, any> }, eve: any): Promise<void>;
-}
-
 // Put hook with type assertion
 gun._.on('put' as any, async (msg: { souls?: string; data?: Record<string, any> }, eve: any) => {
     try {
@@ -182,7 +178,6 @@ gun._.on('put' as any, async (msg: { souls?: string; data?: Record<string, any> 
                     const verified = await verifyGunWrite(nodeData, soul, msg, eve, gun);
                     if (!verified) {
                         console.warn(`Write rejected for soul: ${soul}`);
-                        continue;
                     }
                 }
             } catch (error) {
@@ -195,24 +190,6 @@ gun._.on('put' as any, async (msg: { souls?: string; data?: Record<string, any> 
 });
 
 const peerId: string = `${publicUrl}-bootstrap`;
-
-async function ensureServerPeer() {
-    console.log('Ensuring server peer in knownPeers...');
-    const now = Date.now();
-    const peerData: PeerData = {
-        url: `${publicUrl}/gun`,
-        timestamp: now,
-        lastConnection: now,
-    };
-    gun.get('knownPeers').get(peerId).put(peerData, (ack: any) => {
-        if (ack.err) {
-            console.error('Failed to register server in knownPeers:', ack.err);
-        } else {
-            console.log(`Successfully registered server in knownPeers: ${publicUrl}/gun`);
-        }
-    });
-}
-
 // Update server peer's lastConnection
 let serverPeerUpdateCount = 0;
 setInterval(() => {
@@ -279,6 +256,17 @@ function getShardKey(url: string): { domainShard: string; subShard?: string } {
     return {domainShard};
 }
 
+// Helper function to decode URL-safe Base64
+function fromUrlSafeBase64(urlSafeBase64: string): string {
+    // Replace URL-safe characters with standard Base64 characters
+    let base64 = urlSafeBase64.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed (Base64 strings must be a multiple of 4 in length)
+    while (base64.length % 4) {
+        base64 += '=';
+    }
+    return base64;
+}
+
 // New /image endpoint to serve annotation screenshots
 app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /image called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
@@ -292,7 +280,10 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
 
     let originalUrl: string;
     try {
-        originalUrl = Buffer.from(base64Url, 'base64').toString('utf8');
+        // Decode URL-safe Base64
+        const standardBase64 = fromUrlSafeBase64(base64Url);
+        console.log(`[DEBUG] Converted URL-safe Base64 to standard Base64: ${standardBase64}`);
+        originalUrl = Buffer.from(standardBase64, 'base64').toString('utf8');
         console.log(`[DEBUG] Decoded base64Url to originalUrl: ${originalUrl}`);
         new URL(originalUrl); // Validate URL
     } catch (error) {
@@ -389,7 +380,7 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             console.log(`[DEBUG] Processed image sent, size: ${processedBuffer.length} bytes`);
         } catch (sharpError) {
             console.error(`[DEBUG] Error processing image with sharp:`, sharpError);
-            // Fallback: Send original image if processing fails
+            // Fallback: Send the original image if processing fails
             res.set('Content-Type', `image/${base64Match[1]}`);
             res.send(imageBuffer);
         }
@@ -430,7 +421,7 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
         const maxWaitTime = 5000;
 
         await new Promise<void>((resolve) => {
-            const onAnnotation = (annotation: any, key: string) => {
+            const onAnnotation = (annotation: any) => {
                 if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
                     return;
                 }
@@ -722,7 +713,10 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
 
     let originalUrl: string;
     try {
-        originalUrl = Buffer.from(base64Url, 'base64').toString('utf8');
+        // Decode URL-safe Base64
+        const standardBase64 = fromUrlSafeBase64(base64Url);
+        console.log(`[DEBUG] Converted URL-safe Base64 to standard Base64: ${standardBase64}`);
+        originalUrl = Buffer.from(standardBase64, 'base64').toString('utf8');
         console.log(`[DEBUG] Decoded base64Url to originalUrl: ${originalUrl}`);
         new URL(originalUrl); // Validate URL
     } catch (error) {
