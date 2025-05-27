@@ -70,7 +70,7 @@ function simpleHash(str: string): number {
 }
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
-const publicUrl: string = 'https://citizen-x-bootsrap.onrender.com';
+const publicUrl: string = 'https://service.citizenx.app';
 const websiteUrl: string = 'https://citizenx.app';
 const initialPeers: string[] = [];
 
