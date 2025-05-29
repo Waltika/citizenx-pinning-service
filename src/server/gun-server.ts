@@ -127,16 +127,28 @@ const sitemapPath = '/var/data/sitemap.xml';
 let sitemapUrls: Set<string> = new Set();
 
 function generateSitemap(): string {
-    const urls = Array.from(sitemapUrls).map(url => `
+    // Add homepage URL
+    const homepageUrl = `
+    <url>
+        <loc>${publicUrl}/</loc>
+        <lastmod>${new Date().toISOString()}</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>`;
+
+    // Add annotation URLs
+    const annotationUrls = Array.from(sitemapUrls).map(url => `
     <url>
         <loc>${url}</loc>
         <lastmod>${new Date().toISOString()}</lastmod>
         <changefreq>daily</changefreq>
         <priority>0.8</priority>
     </url>`).join('');
+
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
+${homepageUrl}
+${annotationUrls}
 </urlset>`;
 }
 
@@ -241,6 +253,78 @@ async function bootstrapSitemap(): Promise<void> {
     }
 }
 
+app.get('/', (req: Request, res: Response) => {
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CitizenX Annotations - Service</title>
+    <meta name="description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation and annotate the web.">
+    <link rel="canonical" href="https://citizenx.app">
+    <meta property="og:title" content="CitizenX Annotations - Service">
+    <meta property="og:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
+    <meta property="og:image" content="https://citizenx.app/images/logo.png">
+    <meta property="og:url" content="https://service.citizenx.app">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="CitizenX Annotations - Service">
+    <meta name="twitter:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
+    <meta name="twitter:image" content="https://citizenx.app/images/logo.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+            text-align: center;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            font-size: 1.8em;
+        }
+        p {
+            color: #444;
+            font-size: 16px;
+        }
+        .cta {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #1976d2;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+        .cta:hover {
+            background-color: #1565c0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CitizenX Annotations</h1>
+        <p>This service hosts web annotations created with CitizenX, a platform for collaborative web commentary.</p>
+        <p><a href="https://citizenx.app" class="cta">Visit CitizenX to Start Annotating</a></p>
+        <p>Explore existing annotations via our <a href="/sitemap.xml">sitemap</a>.</p>
+    </div>
+</body>
+</html>
+    `;
+    res.set('Content-Type', 'text/html');
+    res.send(html);
+});
+
 // Serve sitemap.xml
 app.get('/sitemap.xml', (req: Request, res: Response) => {
     try {
@@ -259,7 +343,7 @@ app.get('/api/debug/rebuild-sitemap', async (req: Request, res: Response) => {
     console.log('Rebuilding sitemap via debug endpoint...');
     sitemapUrls.clear();
     await bootstrapSitemap();
-    res.json({ message: 'Sitemap rebuilt successfully', urlCount: sitemapUrls.size });
+    res.json({message: 'Sitemap rebuilt successfully', urlCount: sitemapUrls.size});
     console.log('Debug sitemap rebuild completed with', sitemapUrls.size, 'URLs');
 });
 
@@ -505,8 +589,8 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             console.log(`[DEBUG] Cropping to ${cropWidth}x${cropHeight} at (${left}, ${top})`);
 
             const processedBuffer = await sharp(imageBuffer)
-                .extract({ left, top, width: cropWidth, height: cropHeight })
-                .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
+                .extract({left, top, width: cropWidth, height: cropHeight})
+                .resize({width: targetWidth, height: targetHeight, fit: 'fill'})
                 .toFormat("png")
                 .toBuffer();
 
