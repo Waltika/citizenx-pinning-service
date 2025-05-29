@@ -254,6 +254,27 @@ async function bootstrapSitemap(): Promise<void> {
 }
 
 app.get('/', (req: Request, res: Response) => {
+    // Generate recent annotations list (limit to 10)
+    const recentAnnotations = Array.from(sitemapUrls).slice(0, 10).map(url => {
+        // Extract annotationId and base64Url from sitemap URL
+        const match = url.match(/\/([^\/]+)\/([^\/]+)$/);
+        if (!match) return '';
+        const [, annotationId, base64Url] = match;
+        let originalUrl = '';
+        try {
+            const standardBase64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            originalUrl = Buffer.from(standardBase64, 'base64').toString('utf8');
+        } catch (error) {
+            console.error(`[DEBUG] Failed to decode base64Url: ${base64Url}`, error);
+            return '';
+        }
+        // Create clickable URL matching annotation pages
+        const viewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+        // Use URL hostname as display text (or customize later with metadata)
+        const displayText = new URL(originalUrl).hostname + originalUrl.split('/').slice(3).join('/');
+        return `<li><a href="${viewUrl}" class="annotation-link">${displayText}</a></li>`;
+    }).filter(Boolean).join('');
+
     const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -309,6 +330,29 @@ app.get('/', (req: Request, res: Response) => {
         .cta:hover {
             background-color: #1565c0;
         }
+        .annotations {
+            text-align: left;
+            margin-top: 20px;
+        }
+        .annotations h2 {
+            color: #333;
+            font-size: 1.4em;
+            margin-bottom: 10px;
+        }
+        .annotations ul {
+            list-style: none;
+            padding: 0;
+        }
+        .annotations li {
+            margin-bottom: 8px;
+        }
+        .annotation-link {
+            color: #1976d2;
+            text-decoration: none;
+        }
+        .annotation-link:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -317,6 +361,11 @@ app.get('/', (req: Request, res: Response) => {
         <p>This service hosts web annotations created with CitizenX, a platform for collaborative web commentary.</p>
         <p><a href="https://citizenx.app" class="cta">Visit CitizenX to Start Annotating</a></p>
         <p>Explore existing annotations via our <a href="/sitemap.xml">sitemap</a>.</p>
+        ${recentAnnotations ? `
+        <div class="annotations">
+            <h2>Recent Annotations</h2>
+            <ul>${recentAnnotations}</ul>
+        </div>` : ''}
     </div>
 </body>
 </html>
