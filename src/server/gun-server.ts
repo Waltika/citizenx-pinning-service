@@ -123,7 +123,7 @@ const gun: any = (Gun as any)({
 });
 
 // Sitemap management
-const sitemapPath = `${dataDir}/sitemap.xml`;
+const sitemapPath = '/var/data/sitemap.xml';
 let sitemapUrls: Set<string> = new Set();
 
 function generateSitemap(): string {
@@ -143,9 +143,9 @@ ${urls}
 function updateSitemap(): void {
     try {
         fs.writeFileSync(sitemapPath, generateSitemap());
-        console.log('Sitemap updated successfully');
+        console.log('Sitemap updated successfully at', sitemapPath, 'with', sitemapUrls.size, 'URLs');
     } catch (error) {
-        console.error('Failed to update sitemap:', error);
+        console.error('Failed to update sitemap at', sitemapPath, ':', error);
     }
 }
 
@@ -155,27 +155,32 @@ try {
         const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
         const urls = sitemapContent.match(/<loc>(.*?)<\/loc>/g)?.map(loc => loc.replace(/<loc>|<\/loc>/g, '')) || [];
         sitemapUrls = new Set(urls);
-        console.log('Loaded existing sitemap with', urls.length, 'URLs');
+        console.log('Loaded existing sitemap from', sitemapPath, 'with', urls.length, 'URLs');
+    } else {
+        console.log('No existing sitemap found at', sitemapPath, ', starting with empty sitemap');
     }
 } catch (error) {
-    console.error('Failed to load existing sitemap:', error);
+    console.error('Failed to load existing sitemap from', sitemapPath, ':', error);
 }
 
 // Bootstrap sitemap with existing annotations
 async function bootstrapSitemap(): Promise<void> {
     console.log('Bootstrapping sitemap with existing annotations...');
     try {
-        // Scan all annotation shards
-        const domains = ['google_com', 'facebook_com', 'twitter_com', 'x_com']; // Add known domains
+        const domains = ['google_com', 'facebook_com', 'twitter_com', 'x_com', 'youtube_com'];
+        let totalAnnotations = 0;
         for (const domain of domains) {
             const domainShard = `annotations_${domain}`;
+            console.log(`Scanning domain shard: ${domainShard}`);
             const highTraffic = domains.includes(domain);
             const shards = highTraffic ? Array.from({length: 10}, (_, i) => `${domainShard}_shard_${i}`) : [domainShard];
 
             for (const shard of shards) {
+                console.log(`Processing shard: ${shard}`);
                 await new Promise<void>((resolve) => {
                     gun.get(shard).map().once((data: any, url: string) => {
                         if (data && typeof data === 'object') {
+                            console.log(`Found data for URL: ${url}`);
                             Object.keys(data).forEach((annotationId) => {
                                 if (annotationId !== '_' && data[annotationId] && !data[annotationId].isDeleted && data[annotationId].id && data[annotationId].url) {
                                     const base64Url = Buffer.from(data[annotationId].url).toString('base64')
@@ -184,13 +189,20 @@ async function bootstrapSitemap(): Promise<void> {
                                         .replace(/=/g, '');
                                     const annotationUrl = `${publicUrl}/${data[annotationId].id}/${base64Url}`;
                                     sitemapUrls.add(annotationUrl);
-                                    console.log(`Added existing annotation to sitemap: ${annotationUrl}`);
+                                    totalAnnotations++;
+                                    console.log(`Added annotation to sitemap: ${annotationUrl}`);
+                                } else {
+                                    console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}`);
                                 }
                             });
+                        } else {
+                            console.log(`No valid data found for shard: ${shard}, URL: ${url}`);
                         }
                     });
-                    // Give some time to collect annotations
-                    setTimeout(resolve, 5000);
+                    setTimeout(() => {
+                        console.log(`Completed scan of shard: ${shard}, found ${totalAnnotations} annotations so far`);
+                        resolve();
+                    }, 30000); // 30 seconds timeout
                 });
             }
         }
@@ -215,6 +227,15 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
         console.error('Error serving sitemap.xml:', error);
         res.status(500).send('Internal server error');
     }
+});
+
+// Debug endpoint to rebuild sitemap
+app.get('/api/debug/rebuild-sitemap', async (req: Request, res: Response) => {
+    console.log('Rebuilding sitemap via debug endpoint...');
+    sitemapUrls.clear();
+    await bootstrapSitemap();
+    res.json({ message: 'Sitemap rebuilt successfully', urlCount: sitemapUrls.size });
+    console.log('Debug sitemap rebuild completed with', sitemapUrls.size, 'URLs');
 });
 
 // Throttle logging with expiration
@@ -365,9 +386,7 @@ function getShardKey(url: string): { domainShard: string; subShard?: string } {
 
 // Helper function to decode URL-safe Base64
 function fromUrlSafeBase64(urlSafeBase64: string): string {
-    // Replace URL-safe characters with standard Base64 characters
     let base64 = urlSafeBase64.replace(/-/g, '+').replace(/_/g, '/');
-    // Add padding if needed (Base64 strings must be a multiple of 4 in length)
     while (base64.length % 4) {
         base64 += '=';
     }
@@ -387,12 +406,11 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
 
     let originalUrl: string;
     try {
-        // Decode URL-safe Base64
         const standardBase64 = fromUrlSafeBase64(base64Url);
         console.log(`[DEBUG] Converted URL-safe Base64 to standard Base64: ${standardBase64}`);
         originalUrl = Buffer.from(standardBase64, 'base64').toString('utf8');
         console.log(`[DEBUG] Decoded base64Url to originalUrl: ${originalUrl}`);
-        new URL(originalUrl); // Validate URL
+        new URL(originalUrl);
     } catch (error) {
         console.error(`[DEBUG] Invalid base64Url: ${base64Url}, error:`, error);
         return res.status(400).send('Invalid base64Url');
@@ -408,7 +426,6 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             ...(subShard ? [gun.get(subShard).get(cleanUrl)] : []),
         ];
 
-        // Collect valid annotations
         const annotations = await Promise.all(
             annotationNodes.map(node =>
                 new Promise<Annotation | null>((resolve) => {
@@ -423,7 +440,6 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             )
         );
 
-        // Find the first valid annotation
         const annotation = annotations.find(a => a !== null) || null;
 
         if (!annotation || !annotation.screenshot) {
@@ -432,7 +448,6 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
         }
 
         console.log(`[DEBUG] Annotation screenshot found, length: ${annotation.screenshot.length}`);
-        // Strip Base64 prefix (e.g., data:image/png;base64,) and decode
         const base64Match = annotation.screenshot.match(/^data:image\/(png|jpeg);base64,(.+)$/);
         if (!base64Match) {
             console.log(`[DEBUG] Invalid Base64 image format for annotationId: ${annotationId}`);
@@ -442,44 +457,38 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
         const imageBuffer = Buffer.from(base64Match[2], 'base64');
         console.log(`[DEBUG] Decoded image buffer, size: ${imageBuffer.length} bytes`);
 
-        // Process image with sharp for Open Graph/Twitter Card (1.91:1 aspect ratio)
-        const targetAspectRatio = 1.91; // 1200x630 -> 1200/630 ≈ 1.91
+        const targetAspectRatio = 1.91;
         const targetWidth = 1200;
         const targetHeight = 630;
 
         try {
-            // Load image metadata to determine dimensions
             const metadata = await sharp(imageBuffer).metadata();
             const width = metadata.width || targetWidth;
             const height = metadata.height || targetHeight;
             console.log(`[DEBUG] Original image dimensions: ${width}x${height}`);
 
-            // Calculate current aspect ratio
             const currentAspectRatio = width / height;
 
             let left: number, top: number, cropWidth: number, cropHeight: number;
 
             if (currentAspectRatio > targetAspectRatio) {
-                // Image is too wide: crop width
                 cropHeight = height;
                 cropWidth = Math.floor(height * targetAspectRatio);
-                left = Math.floor((width - cropWidth) / 2); // Center horizontally
+                left = Math.floor((width - cropWidth) / 2);
                 top = 0;
             } else {
-                // Image is too tall: crop height
                 cropWidth = width;
                 cropHeight = Math.floor(width / targetAspectRatio);
                 left = 0;
-                top = 0; // Let's not center vertically. Usually the top is more interesting. Especially on tweets.
+                top = 0;
             }
 
             console.log(`[DEBUG] Cropping to ${cropWidth}x${cropHeight} at (${left}, ${top})`);
 
-            // Crop and resize to target dimensions
             const processedBuffer = await sharp(imageBuffer)
                 .extract({ left, top, width: cropWidth, height: cropHeight })
                 .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
-                .toFormat("png") // Preserve original format (png or jpeg)
+                .toFormat("png")
                 .toBuffer();
 
             res.set('Content-Type', `image/${base64Match[1]}`);
@@ -487,7 +496,6 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             console.log(`[DEBUG] Processed image sent, size: ${processedBuffer.length} bytes`);
         } catch (sharpError) {
             console.error(`[DEBUG] Error processing image with sharp:`, sharpError);
-            // Fallback: Send the original image if processing fails
             res.set('Content-Type', `image/${base64Match[1]}`);
             res.send(imageBuffer);
         }
@@ -516,7 +524,7 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
             console.log(`[Timing] Cleared caches in ${cacheClearEnd - cacheClearStart}ms`);
         }
 
-        const cleanUrl = new URL(url).href; // Simplified URL parsing
+        const cleanUrl = new URL(url).href;
         const {domainShard, subShard} = getShardKey(cleanUrl);
         const annotationNodes = [
             gun.get(domainShard).get(cleanUrl),
@@ -541,7 +549,7 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
                 }
                 loadedAnnotations.add(annotation.id);
                 annotationCache.set(cacheKey, Date.now());
-                setTimeout(() => annotationCache.delete(cacheKey), ANNOTATION_CACHE_TTL); // Expire after 5 minutes
+                setTimeout(() => annotationCache.delete(cacheKey), ANNOTATION_CACHE_TTL);
                 annotations.push({
                     id: annotation.id,
                     url: annotation.url,
@@ -873,7 +881,6 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
         const canonicalUrl = `${publicUrl}/${annotationId}/${base64Url}`;
         const viewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
 
-        // Generate keywords from annotation content
         const keywords = annotationNoHTML
             .split(/\s+/)
             .filter(word => word.length > 3)
@@ -1003,12 +1010,11 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
 
     let originalUrl: string;
     try {
-        // Decode URL-safe Base64
         const standardBase64 = fromUrlSafeBase64(base64Url);
         console.log(`[DEBUG] Converted URL-safe Base64 to standard Base64: ${standardBase64}`);
         originalUrl = Buffer.from(standardBase64, 'base64').toString('utf8');
         console.log(`[DEBUG] Decoded base64Url to originalUrl: ${originalUrl}`);
-        new URL(originalUrl); // Validate URL
+        new URL(originalUrl);
     } catch (error) {
         console.error(`[DEBUG] Invalid base64Url: ${base64Url}, error:`, error);
         return res.status(400).send('Invalid base64Url');
@@ -1053,7 +1059,6 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
         const description = annotationNoHTML.length > 160 ? `${annotationNoHTML.slice(0, 157)}...` : annotationNoHTML;
         const title = `Annotation by ${profile.handle} on ${cleanUrl}`;
         const defaultImage = 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
-        // Use /image endpoint for screenshot if available, else fallback
         const image = metadata.ogImage
             ? metadata.ogImage
             : annotation.screenshot ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png` : defaultImage;
@@ -1067,7 +1072,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
     <title>${title}</title>
     <meta name="description" content="${description}">
     <meta property="og:title" content="${title}">
-    <meta name="og:description" content="${description}">
+    <meta property="og:description" content="${description}">
     <meta property="og:image" content="${image}">
     <meta property="og:url" content="${cleanUrl}">
     <meta property="og:type" content="website">
@@ -1080,20 +1085,19 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
 <body>
     <script>
         (function() {
-            let redirectTimed = false;
+            let redirectHandled = false;
             function redirect(url) {
                 console.log('[DEBUG] Redirecting to:', url);
-                if (!redirectTimed) {
-                    redirectTimed = true;
+                if (!redirectHandled) {
+                    redirectHandled = true;
                     window.location.href = url;
                 }
             }
 
-            // Timeout to detect browser and redirect
             setTimeout(() => {
                 const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg|OPR/.test(navigator.userAgent);
                 console.log('[DEBUG] Browser detection: isChrome=', isChrome);
-                console.log('Original URL:', '${originalUrl}');
+                console.log('Original URL: ${originalUrl}');
                 if (isChrome) {
                     redirect('${websiteUrl}/check-extension?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}');
                 } else {
