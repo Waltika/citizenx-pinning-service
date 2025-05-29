@@ -78,6 +78,7 @@ const app: Express = express();
 
 app.use(limiter);
 app.use(express.json());
+// noinspection SpellCheckingInspection
 app.use(cors({
     origin: [
         'https://citizenx.app',
@@ -162,8 +163,6 @@ try {
     console.error('Failed to load existing sitemap from', sitemapPath, ':', error);
 }
 
-// [Previous imports and unchanged code remain the same]
-
 // Bootstrap sitemap with existing annotations
 async function bootstrapSitemap(): Promise<void> {
     console.log('Bootstrapping sitemap with existing annotations...');
@@ -171,10 +170,14 @@ async function bootstrapSitemap(): Promise<void> {
         const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
         let totalAnnotations = 0;
 
-        // Dynamically discover all annotation shards
-        const domains: string[] = [];
+        // Dynamically discover all annotation shards with fallback
+        const domains: string[] = ['x_com']; // Fallback to ensure x_com is scanned
         await new Promise<void>((resolve) => {
             gun.get('').map().once((data: any, key: string) => {
+                if (!key || typeof key !== 'string' || key.length === 0) {
+                    console.warn(`Skipping invalid key: ${key}`);
+                    return;
+                }
                 console.log(`Top-level node: ${key}`);
                 if (key.startsWith('annotations_') && !key.includes('_shard_')) {
                     const domain = key.replace('annotations_', '');
@@ -184,7 +187,7 @@ async function bootstrapSitemap(): Promise<void> {
                     }
                 }
             });
-            setTimeout(resolve, 30000); // Wait 30 seconds to collect domains
+            setTimeout(resolve, 60000); // Wait 60 seconds to collect domains
         });
 
         console.log('Found domains:', domains);
@@ -203,26 +206,26 @@ async function bootstrapSitemap(): Promise<void> {
                 await new Promise<void>((resolve) => {
                     // Scan all URLs under the shard
                     gun.get(shard).map().once((urlData: any, url: string) => {
-                        if (url !== '_' && urlData && typeof urlData === 'object') {
-                            console.log(`Found URL node: ${url}`);
-                            // Scan all annotations under the URL
-                            gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
-                                if (annotation && !annotation.isDeleted && annotation.id && annotation.url) {
-                                    const base64Url = Buffer.from(annotation.url).toString('base64')
-                                        .replace(/\+/g, '-')
-                                        .replace(/\//g, '_')
-                                        .replace(/=/g, '');
-                                    const annotationUrl = `${publicUrl}/${annotation.id}/${base64Url}`;
-                                    sitemapUrls.add(annotationUrl);
-                                    totalAnnotations++;
-                                    console.log(`Added annotation to sitemap: ${annotationUrl}, ID: ${annotation.id}, URL: ${annotation.url}`);
-                                } else {
-                                    console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
-                                }
-                            });
-                        } else {
+                        if (!url || url === '_' || !urlData || typeof urlData !== 'object') {
                             console.log(`No valid URL data in shard: ${shard}, URL: ${url}`);
+                            return;
                         }
+                        console.log(`Found URL node: ${url}`);
+                        // Scan all annotations under the URL
+                        gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
+                            if (!annotationId || !annotation || annotation.isDeleted || !annotation.id || !annotation.url) {
+                                console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
+                                return;
+                            }
+                            const base64Url = Buffer.from(annotation.url).toString('base64')
+                                .replace(/\+/g, '-')
+                                .replace(/\//g, '_')
+                                .replace(/=/g, '');
+                            const annotationUrl = `${publicUrl}/${annotation.id}/${base64Url}`;
+                            sitemapUrls.add(annotationUrl);
+                            totalAnnotations++;
+                            console.log(`Added annotation to sitemap: ${annotationUrl}, ID: ${annotation.id}, URL: ${annotation.url}`);
+                        });
                     });
                     setTimeout(() => {
                         console.log(`Completed scan of shard: ${shard}, found ${totalAnnotations} annotations so far`);
@@ -237,9 +240,6 @@ async function bootstrapSitemap(): Promise<void> {
         console.error('Error bootstrapping sitemap:', error);
     }
 }
-
-// Run bootstrap on startup
-bootstrapSitemap();
 
 // Serve sitemap.xml
 app.get('/sitemap.xml', (req: Request, res: Response) => {
