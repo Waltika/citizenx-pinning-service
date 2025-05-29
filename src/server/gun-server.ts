@@ -168,41 +168,54 @@ async function bootstrapSitemap(): Promise<void> {
     console.log('Bootstrapping sitemap with existing annotations...');
     try {
         const domains = ['google_com', 'facebook_com', 'twitter_com', 'x_com', 'youtube_com'];
+        const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
         let totalAnnotations = 0;
+
         for (const domain of domains) {
             const domainShard = `annotations_${domain}`;
             console.log(`Scanning domain shard: ${domainShard}`);
-            const highTraffic = domains.includes(domain);
-            const shards = highTraffic ? Array.from({length: 10}, (_, i) => `${domainShard}_shard_${i}`) : [domainShard];
+            const isHighTraffic = highTrafficDomains.includes(domain);
+            // Always scan the main shard, and sub-shards only for high-traffic domains
+            const shards = [domainShard];
+            if (isHighTraffic) {
+                shards.push(...Array.from({length: 10}, (_, i) => `${domainShard}_shard_${i}`));
+            }
 
             for (const shard of shards) {
                 console.log(`Processing shard: ${shard}`);
                 await new Promise<void>((resolve) => {
-                    gun.get(shard).map().once((data: any, url: string) => {
-                        if (data && typeof data === 'object') {
-                            console.log(`Found data for URL: ${url}`);
-                            Object.keys(data).forEach((annotationId) => {
-                                if (annotationId !== '_' && data[annotationId] && !data[annotationId].isDeleted && data[annotationId].id && data[annotationId].url) {
-                                    const base64Url = Buffer.from(data[annotationId].url).toString('base64')
-                                        .replace(/\+/g, '-')
-                                        .replace(/\//g, '_')
-                                        .replace(/=/g, '');
-                                    const annotationUrl = `${publicUrl}/${data[annotationId].id}/${base64Url}`;
-                                    sitemapUrls.add(annotationUrl);
-                                    totalAnnotations++;
-                                    console.log(`Added annotation to sitemap: ${annotationUrl}`);
-                                } else {
-                                    console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}`);
+                    // First, inspect the shard structure
+                    gun.get(shard).once((shardData: any) => {
+                        console.log(`Shard ${shard} structure:`, shardData);
+                        if (shardData && typeof shardData === 'object') {
+                            Object.keys(shardData).forEach((url) => {
+                                if (url !== '_') {
+                                    console.log(`Found URL node: ${url}`);
+                                    gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
+                                        if (annotation && !annotation.isDeleted && annotation.id && annotation.url) {
+                                            const base64Url = Buffer.from(annotation.url).toString('base64')
+                                                .replace(/\+/g, '-')
+                                                .replace(/\//g, '_')
+                                                .replace(/=/g, '');
+                                            const annotationUrl = `${publicUrl}/${annotation.id}/${base64Url}`;
+                                            sitemapUrls.add(annotationUrl);
+                                            totalAnnotations++;
+                                            console.log(`Added annotation to sitemap: ${annotationUrl}, ID: ${annotation.id}, URL: ${annotation.url}`);
+                                        } else {
+                                            console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
+                                        }
+                                    });
                                 }
                             });
                         } else {
-                            console.log(`No valid data found for shard: ${shard}, URL: ${url}`);
+                            console.log(`No data found in shard: ${shard}`);
                         }
                     });
+
                     setTimeout(() => {
                         console.log(`Completed scan of shard: ${shard}, found ${totalAnnotations} annotations so far`);
                         resolve();
-                    }, 30000); // 30 seconds timeout
+                    }, 60000); // 60 seconds timeout
                 });
             }
         }
@@ -296,7 +309,6 @@ gun._.on('put' as any, async (msg: { souls?: string; data?: Record<string, any> 
                         console.warn(`Write rejected for soul: ${soul}`);
                         continue;
                     }
-                    // Check if this is an annotation write
                     if (soul.includes('annotations_') && nodeData.id && nodeData.url) {
                         const base64Url = Buffer.from(nodeData.url).toString('base64')
                             .replace(/\+/g, '-')
@@ -318,7 +330,6 @@ gun._.on('put' as any, async (msg: { souls?: string; data?: Record<string, any> 
 });
 
 const peerId: string = `${publicUrl}-bootstrap`;
-// Update server peer's lastConnection
 let serverPeerUpdateCount = 0;
 setInterval(() => {
     const now = Date.now();
@@ -336,7 +347,6 @@ setInterval(() => {
     });
 }, 5 * 60 * 1000);
 
-// Update lastConnection for peers
 const peerConnectionCount = new Map<string, number>();
 gun.on('hi', (peer: { url?: string }) => {
     if (peer.url) {
@@ -362,7 +372,6 @@ gun.on('hi', (peer: { url?: string }) => {
     }
 });
 
-// Simple URL parsing for sharding
 function getShardKey(url: string): { domainShard: string; subShard?: string } {
     let cleanUrl: string;
     try {
@@ -384,7 +393,6 @@ function getShardKey(url: string): { domainShard: string; subShard?: string } {
     return {domainShard};
 }
 
-// Helper function to decode URL-safe Base64
 function fromUrlSafeBase64(urlSafeBase64: string): string {
     let base64 = urlSafeBase64.replace(/-/g, '+').replace(/_/g, '/');
     while (base64.length % 4) {
@@ -393,7 +401,6 @@ function fromUrlSafeBase64(urlSafeBase64: string): string {
     return base64;
 }
 
-// New /image endpoint to serve annotation screenshots
 app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /image called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
 
@@ -813,7 +820,6 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
     }
 });
 
-// New annotation display endpoint with enhanced SEO
 app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /:annotationId/:base64Url called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
 
@@ -995,7 +1001,6 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     }
 });
 
-// Modified /viewannotation route
 app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /viewannotation called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
     console.log(`[DEBUG] Request headers:`, req.headers);
