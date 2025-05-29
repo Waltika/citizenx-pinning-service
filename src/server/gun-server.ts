@@ -290,6 +290,14 @@ app.get('/', (req: Request, res: Response) => {
     <meta name="twitter:title" content="CitizenX Annotations - Service">
     <meta name="twitter:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
     <meta name="twitter:image" content="https://citizenx.app/images/logo.png">
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-YDDS5BJ90C"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-YDDS5BJ90C');
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
