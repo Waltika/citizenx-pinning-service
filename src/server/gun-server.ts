@@ -256,7 +256,6 @@ async function bootstrapSitemap(): Promise<void> {
 app.get('/', (req: Request, res: Response) => {
     // Generate recent annotations list (limit to 10)
     const recentAnnotations = Array.from(sitemapUrls).slice(0, 10).map(url => {
-        // Extract annotationId and base64Url from sitemap URL
         const match = url.match(/\/([^\/]+)\/([^\/]+)$/);
         if (!match) return '';
         const [, annotationId, base64Url] = match;
@@ -268,9 +267,7 @@ app.get('/', (req: Request, res: Response) => {
             console.error(`[DEBUG] Failed to decode base64Url: ${base64Url}`, error);
             return '';
         }
-        // Create clickable URL matching annotation pages
         const viewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
-        // Use URL hostname as display text (or customize later with metadata)
         const displayText = new URL(originalUrl).hostname + originalUrl.split('/').slice(3).join('/');
         return `<li><a href="${viewUrl}" class="annotation-link">${displayText}</a></li>`;
     }).filter(Boolean).join('');
@@ -308,6 +305,16 @@ app.get('/', (req: Request, res: Response) => {
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            width: 32px;
+            height: 32px;
         }
         h1 {
             color: #333;
@@ -357,6 +364,11 @@ app.get('/', (req: Request, res: Response) => {
 </head>
 <body>
     <div class="container">
+        <div class="header">
+            <a href="https://citizenx.app">
+                <img src="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png" alt="CitizenX Logo" class="logo">
+            </a>
+        </div>
         <h1>CitizenX Annotations</h1>
         <p>This service hosts web annotations created with CitizenX, a platform for collaborative web commentary.</p>
         <p><a href="https://citizenx.app" class="cta">Visit CitizenX to Start Annotating</a></p>
