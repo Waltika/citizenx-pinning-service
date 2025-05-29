@@ -122,6 +122,101 @@ const gun: any = (Gun as any)({
     batch: false,
 });
 
+// Sitemap management
+const sitemapPath = `${dataDir}/sitemap.xml`;
+let sitemapUrls: Set<string> = new Set();
+
+function generateSitemap(): string {
+    const urls = Array.from(sitemapUrls).map(url => `
+    <url>
+        <loc>${url}</loc>
+        <lastmod>${new Date().toISOString()}</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>0.8</priority>
+    </url>`).join('');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`;
+}
+
+function updateSitemap(): void {
+    try {
+        fs.writeFileSync(sitemapPath, generateSitemap());
+        console.log('Sitemap updated successfully');
+    } catch (error) {
+        console.error('Failed to update sitemap:', error);
+    }
+}
+
+// Load existing sitemap on startup
+try {
+    if (fs.existsSync(sitemapPath)) {
+        const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
+        const urls = sitemapContent.match(/<loc>(.*?)<\/loc>/g)?.map(loc => loc.replace(/<loc>|<\/loc>/g, '')) || [];
+        sitemapUrls = new Set(urls);
+        console.log('Loaded existing sitemap with', urls.length, 'URLs');
+    }
+} catch (error) {
+    console.error('Failed to load existing sitemap:', error);
+}
+
+// Bootstrap sitemap with existing annotations
+async function bootstrapSitemap(): Promise<void> {
+    console.log('Bootstrapping sitemap with existing annotations...');
+    try {
+        // Scan all annotation shards
+        const domains = ['google_com', 'facebook_com', 'twitter_com', 'x_com']; // Add known domains
+        for (const domain of domains) {
+            const domainShard = `annotations_${domain}`;
+            const highTraffic = domains.includes(domain);
+            const shards = highTraffic ? Array.from({length: 10}, (_, i) => `${domainShard}_shard_${i}`) : [domainShard];
+
+            for (const shard of shards) {
+                await new Promise<void>((resolve) => {
+                    gun.get(shard).map().once((data: any, url: string) => {
+                        if (data && typeof data === 'object') {
+                            Object.keys(data).forEach((annotationId) => {
+                                if (annotationId !== '_' && data[annotationId] && !data[annotationId].isDeleted && data[annotationId].id && data[annotationId].url) {
+                                    const base64Url = Buffer.from(data[annotationId].url).toString('base64')
+                                        .replace(/\+/g, '-')
+                                        .replace(/\//g, '_')
+                                        .replace(/=/g, '');
+                                    const annotationUrl = `${publicUrl}/${data[annotationId].id}/${base64Url}`;
+                                    sitemapUrls.add(annotationUrl);
+                                    console.log(`Added existing annotation to sitemap: ${annotationUrl}`);
+                                }
+                            });
+                        }
+                    });
+                    // Give some time to collect annotations
+                    setTimeout(resolve, 5000);
+                });
+            }
+        }
+        updateSitemap();
+        console.log('Sitemap bootstrap completed with', sitemapUrls.size, 'URLs');
+    } catch (error) {
+        console.error('Error bootstrapping sitemap:', error);
+    }
+}
+
+// Run bootstrap on startup
+bootstrapSitemap();
+
+// Serve sitemap.xml
+app.get('/sitemap.xml', (req: Request, res: Response) => {
+    try {
+        const sitemapContent = generateSitemap();
+        res.set('Content-Type', 'application/xml');
+        res.send(sitemapContent);
+        console.log('Served sitemap.xml with', sitemapUrls.size, 'URLs');
+    } catch (error) {
+        console.error('Error serving sitemap.xml:', error);
+        res.status(500).send('Internal server error');
+    }
+});
+
 // Throttle logging with expiration
 const logThrottle: Map<string, number> = new Map();
 const LOG_THROTTLE_TTL = 3600000; // 1 hour in milliseconds
@@ -145,7 +240,7 @@ gun._.on('in', (msg: { put?: Record<string, any> }) => {
     }
 });
 
-// Put hook with type assertion
+// Modified put hook to capture annotation writes and update sitemap
 gun._.on('put' as any, async (msg: { souls?: string; data?: Record<string, any> }, eve: any) => {
     try {
         if (!msg.souls || !msg.data || typeof msg.data !== 'object') {
@@ -178,6 +273,18 @@ gun._.on('put' as any, async (msg: { souls?: string; data?: Record<string, any> 
                     const verified = await verifyGunWrite(nodeData, soul, msg, eve, gun);
                     if (!verified) {
                         console.warn(`Write rejected for soul: ${soul}`);
+                        continue;
+                    }
+                    // Check if this is an annotation write
+                    if (soul.includes('annotations_') && nodeData.id && nodeData.url) {
+                        const base64Url = Buffer.from(nodeData.url).toString('base64')
+                            .replace(/\+/g, '-')
+                            .replace(/\//g, '_')
+                            .replace(/=/g, '');
+                        const annotationUrl = `${publicUrl}/${nodeData.id}/${base64Url}`;
+                        sitemapUrls.add(annotationUrl);
+                        updateSitemap();
+                        console.log(`Added annotation to sitemap: ${annotationUrl}`);
                     }
                 }
             } catch (error) {
@@ -698,7 +805,190 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
     }
 });
 
-// New /viewannotation route with enhanced logging
+// New annotation display endpoint with enhanced SEO
+app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
+    console.log(`[DEBUG] /:annotationId/:base64Url called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
+
+    const {annotationId, base64Url} = req.params;
+
+    if (!annotationId || !base64Url) {
+        console.log(`[DEBUG] Missing parameters: annotationId=${annotationId}, base64Url=${base64Url}`);
+        return res.status(400).send('Missing annotationId or base64Url');
+    }
+
+    let originalUrl: string;
+    try {
+        const standardBase64 = fromUrlSafeBase64(base64Url);
+        console.log(`[DEBUG] Converted URL-safe Base64 to standard Base64: ${standardBase64}`);
+        originalUrl = Buffer.from(standardBase64, 'base64').toString('utf8');
+        console.log(`[DEBUG] Decoded base64Url to originalUrl: ${originalUrl}`);
+        new URL(originalUrl);
+    } catch (error) {
+        console.error(`[DEBUG] Invalid base64Url: ${base64Url}, error:`, error);
+        return res.status(400).send('Invalid base64Url');
+    }
+
+    try {
+        const cleanUrl = new URL(originalUrl).href;
+        console.log(`[DEBUG] Cleaned URL: ${cleanUrl}`);
+        const {domainShard, subShard} = getShardKey(cleanUrl);
+        console.log(`[DEBUG] Sharding: domainShard=${domainShard}, subShard=${subShard}`);
+        const annotationNodes = [
+            gun.get(domainShard).get(cleanUrl),
+            ...(subShard ? [gun.get(subShard).get(cleanUrl)] : []),
+        ];
+
+        let annotation: any = null;
+        await Promise.all(
+            annotationNodes.map(node =>
+                new Promise<void>((resolve) => {
+                    node.get(annotationId).once((data: any) => {
+                        console.log(`[DEBUG] Fetched annotation for annotationId: ${annotationId}, data:`, data);
+                        if (data && !data.isDeleted) {
+                            annotation = data;
+                        }
+                        resolve();
+                    });
+                })
+            )
+        );
+
+        if (!annotation) {
+            console.log(`[DEBUG] No annotation found for annotationId: ${annotationId}, url: ${cleanUrl}`);
+            return res.status(404).send('Annotation not found');
+        }
+
+        console.log(`[DEBUG] Annotation found:`, annotationId);
+        const profile = await getProfileWithRetries(annotation.author);
+        console.log(`[DEBUG] Fetched profile for author: ${annotation.author}, profile:`, profile);
+        let metadata: Metadata = await fetchPageMetadata(cleanUrl);
+        console.log(`[DEBUG] Fetched metadata for url: ${cleanUrl}, metadata:`, metadata);
+        const annotationNoHTML = stripHtml(annotation.content);
+        const description = annotationNoHTML.length > 160 ? `${annotationNoHTML.slice(0, 157)}...` : annotationNoHTML;
+        const title = `${profile.handle}'s Annotation on ${new URL(cleanUrl).hostname}`;
+        const defaultImage = 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
+        const image = annotation.screenshot
+            ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png`
+            : metadata.ogImage || defaultImage;
+        const canonicalUrl = `${publicUrl}/${annotationId}/${base64Url}`;
+        const viewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+
+        // Generate keywords from annotation content
+        const keywords = annotationNoHTML
+            .split(/\s+/)
+            .filter(word => word.length > 3)
+            .slice(0, 10)
+            .join(', ');
+
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <meta name="description" content="${description}">
+    <meta name="keywords" content="${keywords}">
+    <meta name="author" content="${profile.handle}">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${image}">
+    <meta property="og:url" content="${canonicalUrl}">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="${title}">
+    <meta name="twitter:description" content="${description}">
+    <meta name="twitter:image" content="${image}">
+    <link rel="canonical" href="${canonicalUrl}">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .annotation-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .annotation-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .author-img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 12px;
+        }
+        .author-name {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.2em;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .content {
+            margin-bottom: 20px;
+            color: #444;
+            font-size: 16px;
+        }
+        .screenshot {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+        .view-link {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: #1976d2;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+        .view-link:hover {
+            background-color: #1565c0;
+        }
+    </style>
+</head>
+<body>
+    <div class="annotation-container">
+        <div class="annotation-header">
+            ${profile.profilePicture ? `<img src="${profile.profilePicture}" alt="${profile.handle || 'User'}" class="author-img">` : ''}
+            <div>
+                <div class="author-name">${profile.handle || 'Anonymous'}</div>
+                <div class="timestamp">${new Date(annotation.timestamp).toLocaleString()}</div>
+            </div>
+        </div>
+        <div class="content">${annotation.content}</div>
+        ${image !== defaultImage ? `<img src="${image}" alt="Annotation screenshot" class="screenshot">` : ''}
+        <a href="${viewUrl}" class="view-link">View Full Annotation on CitizenX</a>
+    </div>
+</body>
+</html>
+`;
+
+        console.log(`[DEBUG] Sending HTML response for /${annotationId}/${base64Url}`);
+        res.set('Content-Type', 'text/html');
+        res.send(html);
+    } catch (error) {
+        console.error(`[ERROR] Error in /${annotationId}/${base64Url}:`, error);
+        res.status(500).send('Internal server error');
+    }
+});
+
+// Modified /viewannotation route
 app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /viewannotation called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
     console.log(`[DEBUG] Request headers:`, req.headers);
@@ -760,12 +1050,13 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
         let metadata: Metadata = await fetchPageMetadata(cleanUrl);
         console.log(`[DEBUG] Fetched metadata for url: ${cleanUrl}, metadata:`, metadata);
         const annotationNoHTML = stripHtml(annotation.content);
-        const description = annotationNoHTML.length > 100 ? `${annotationNoHTML.slice(0, 97)}...` : annotationNoHTML;
+        const description = annotationNoHTML.length > 160 ? `${annotationNoHTML.slice(0, 157)}...` : annotationNoHTML;
         const title = `Annotation by ${profile.handle} on ${cleanUrl}`;
         const defaultImage = 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
         // Use /image endpoint for screenshot if available, else fallback
         const image = metadata.ogImage
-            ? metadata.ogImage : annotation.screenshot ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png` : defaultImage;
+            ? metadata.ogImage
+            : annotation.screenshot ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png` : defaultImage;
 
         const html = `
 <!DOCTYPE html>
@@ -776,7 +1067,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
     <title>${title}</title>
     <meta name="description" content="${description}">
     <meta property="og:title" content="${title}">
-    <meta property="og:description" content="${description}">
+    <meta name="og:description" content="${description}">
     <meta property="og:image" content="${image}">
     <meta property="og:url" content="${cleanUrl}">
     <meta property="og:type" content="website">
@@ -789,11 +1080,11 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
 <body>
     <script>
         (function() {
-            let redirectHandled = false;
+            let redirectTimed = false;
             function redirect(url) {
                 console.log('[DEBUG] Redirecting to:', url);
-                if (!redirectHandled) {
-                    redirectHandled = true;
+                if (!redirectTimed) {
+                    redirectTimed = true;
                     window.location.href = url;
                 }
             }
@@ -802,11 +1093,11 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
             setTimeout(() => {
                 const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg|OPR/.test(navigator.userAgent);
                 console.log('[DEBUG] Browser detection: isChrome=', isChrome);
-                console.log('Original URL ${originalUrl}');
+                console.log('Original URL:', '${originalUrl}');
                 if (isChrome) {
-                    redirect('${websiteUrl}/check-extension?annotationId=${annotationId}&url=${originalUrl}');
+                    redirect('${websiteUrl}/check-extension?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}');
                 } else {
-                    redirect('${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${originalUrl}');
+                    redirect('${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}');
                 }
             }, 500);
         })();
