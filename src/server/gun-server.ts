@@ -78,7 +78,6 @@ const app: Express = express();
 
 app.use(limiter);
 app.use(express.json());
-// noinspection SpellCheckingInspection
 app.use(cors({
     origin: [
         'https://citizenx.app',
@@ -167,15 +166,30 @@ try {
 async function bootstrapSitemap(): Promise<void> {
     console.log('Bootstrapping sitemap with existing annotations...');
     try {
-        const domains = ['google_com', 'facebook_com', 'twitter_com', 'x_com', 'youtube_com'];
         const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
         let totalAnnotations = 0;
+
+        // Dynamically discover all annotation shards
+        const domains: string[] = [];
+        await new Promise<void>((resolve) => {
+            gun.get('').map().once((data: any, key: string) => {
+                if (key.startsWith('annotations_') && !key.includes('_shard_')) {
+                    const domain = key.replace('annotations_', '');
+                    if (!domains.includes(domain)) {
+                        domains.push(domain);
+                        console.log(`Discovered domain: ${domain}`);
+                    }
+                }
+            });
+            setTimeout(resolve, 10000); // Wait 10 seconds to collect domains
+        });
+
+        console.log('Found domains:', domains);
 
         for (const domain of domains) {
             const domainShard = `annotations_${domain}`;
             console.log(`Scanning domain shard: ${domainShard}`);
             const isHighTraffic = highTrafficDomains.includes(domain);
-            // Always scan the main shard, and sub-shards only for high-traffic domains
             const shards = [domainShard];
             if (isHighTraffic) {
                 shards.push(...Array.from({length: 10}, (_, i) => `${domainShard}_shard_${i}`));
@@ -184,7 +198,6 @@ async function bootstrapSitemap(): Promise<void> {
             for (const shard of shards) {
                 console.log(`Processing shard: ${shard}`);
                 await new Promise<void>((resolve) => {
-                    // First, inspect the shard structure
                     gun.get(shard).once((shardData: any) => {
                         console.log(`Shard ${shard} structure:`, shardData);
                         if (shardData && typeof shardData === 'object') {
@@ -211,11 +224,10 @@ async function bootstrapSitemap(): Promise<void> {
                             console.log(`No data found in shard: ${shard}`);
                         }
                     });
-
                     setTimeout(() => {
                         console.log(`Completed scan of shard: ${shard}, found ${totalAnnotations} annotations so far`);
                         resolve();
-                    }, 60000); // 60 seconds timeout
+                    }, 120000); // 120 seconds timeout
                 });
             }
         }
