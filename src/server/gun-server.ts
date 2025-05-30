@@ -138,13 +138,16 @@ function generateSitemap(): string {
         <priority>0.6</priority>
     </url>`;
 
-    const annotationUrls = Array.from(sitemapUrls).map(entry => `
-    <url>
-        <loc>${entry.url}</loc>
-        <lastmod>${new Date(entry.timestamp).toISOString()}</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>0.8</priority>
-    </url>`).join('');
+    // Filter out root URL to prevent duplicates
+    const annotationUrls = Array.from(sitemapUrls)
+        .filter(entry => entry.url !== `${publicUrl}/`)
+        .map(entry => `
+        <url>
+            <loc>${entry.url}</loc>
+            <lastmod>${new Date(entry.timestamp).toISOString()}</lastmod>
+            <changefreq>daily</changefreq>
+            <priority>0.8</priority>
+        </url>`).join('');
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -169,6 +172,10 @@ function addAnnotationToSitemap(annotationId: string, annotationUrl: string, tim
         .replace(/\//g, '_')
         .replace(/=/g, '');
     const sitemapUrl = `${publicUrl}/${annotationId}/${base64Url}`;
+    if (sitemapUrl === `${publicUrl}/` || annotationId === 'undefined') {
+        console.log(`Skipped adding invalid or homepage to sitemapUrls: ${sitemapUrl}`);
+        return;
+    }
     const existingEntry = Array.from(sitemapUrls).find(entry => entry.url === sitemapUrl);
     if (!existingEntry) {
         sitemapUrls.add({ url: sitemapUrl, timestamp });
@@ -187,8 +194,10 @@ try {
     if (fs.existsSync(sitemapPath)) {
         const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
         const urls = sitemapContent.match(/<loc>(.*?)<\/loc>/g)?.map(loc => loc.replace(/<loc>|<\/loc>/g, '')) || [];
-        sitemapUrls = new Set(urls.map(url => ({ url, timestamp: Date.now() })));
-        console.log('Loaded existing sitemap from', sitemapPath, 'with', urls.length, 'URLs');
+        sitemapUrls = new Set(urls
+            .filter(url => url !== `${publicUrl}/`) // Exclude root URL
+            .map(url => ({ url, timestamp: Date.now() })));
+        console.log('Loaded existing sitemap from', sitemapPath, 'with', sitemapUrls.size, 'URLs');
     } else {
         console.log('No existing sitemap found at', sitemapPath, ', starting with empty sitemap');
     }
@@ -196,7 +205,14 @@ try {
     console.error('Failed to load existing sitemap from', sitemapPath, ':', error);
 }
 
-// Bootstrap sitemap with existing annotations
+// Bootstrap sitemap with existing annotations only if sitemap file doesn't exist
+if (!fs.existsSync(sitemapPath)) {
+    console.log('No sitemap file found, running bootstrapSitemap...');
+    bootstrapSitemap();
+} else {
+    console.log('Sitemap file exists, skipping bootstrapSitemap to preserve existing sitemap');
+}
+
 async function bootstrapSitemap(): Promise<void> {
     console.log('Bootstrapping sitemap with existing annotations...');
     try {
@@ -265,9 +281,6 @@ async function bootstrapSitemap(): Promise<void> {
     }
 }
 
-// Run bootstrap on startup
-bootstrapSitemap();
-
 function appendUtmParams(baseUrl: string, utmParams: ParsedQs): string {
     const url = new URL(baseUrl);
     const validUtmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
@@ -280,11 +293,10 @@ function appendUtmParams(baseUrl: string, utmParams: ParsedQs): string {
     return url.toString();
 }
 
-// Serve sitemap.xml (updated to read from file)
+// Serve sitemap.xml
 app.get('/sitemap.xml', (_req: Request, res: Response) => {
     try {
         console.log(`Serving sitemap.xml, in-memory sitemapUrls size: ${sitemapUrls.size}, URLs:`, Array.from(sitemapUrls).map(entry => entry.url));
-        // Try reading from file first
         if (fs.existsSync(sitemapPath)) {
             const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
             console.log(`Read sitemap from ${sitemapPath}, content length: ${sitemapContent.length} bytes`);
@@ -548,7 +560,7 @@ app.get('/', (req: Request, res: Response) => {
         .cta {
             display: inline-block;
             padding: 10px 20px;
-            background-color: #1976d2;
+            background-color: #000000;
             color: white;
             text-decoration: none;
             border-radius: 6px;
@@ -556,7 +568,7 @@ app.get('/', (req: Request, res: Response) => {
             transition: background-color 0.3s ease;
         }
         .cta:hover {
-            background-color: #1565c0;
+            background-color: #1c1b1b;
         }
         .annotations {
             text-align: left;
