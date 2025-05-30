@@ -226,6 +226,7 @@ try {
         const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
         // Match <url> entries and extract <loc> and <lastmod>
         const urlEntries = sitemapContent.match(/<url>(.*?)<loc>(.*?)<\/loc>(.*?)<lastmod>(.*?)<\/lastmod>(.*?)<\/url>/g) || [];
+        console.log('Loaded existing sitemap from', sitemapPath, 'with', urlEntries.length, 'URLs');
         const urls = urlEntries.map(entry => {
             const locMatch = entry.match(/<loc>(.*?)<\/loc>/);
             const lastmodMatch = entry.match(/<lastmod>(.*?)<\/lastmod>/);
@@ -234,7 +235,7 @@ try {
             return url && url !== `${publicUrl}/` ? {url, timestamp} : null;
         }).filter(item => item !== null); // Exclude root URL and invalid entries
         sitemapUrls = new Set(urls);
-        console.log('Loaded existing sitemap from', sitemapPath, 'with', sitemapUrls.size, 'URLs');
+        console.log('In Memory sitemap Set with', sitemapUrls.size, 'URLs');
     } else {
         console.log('No existing sitemap found at', sitemapPath, ', starting with empty sitemap');
     }
