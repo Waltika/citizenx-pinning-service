@@ -142,6 +142,7 @@ function generateSitemap(): string {
             <priority>0.8</priority>
         </url>`).join('');
 
+    // noinspection HttpUrlsUsage
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${annotationUrls}
@@ -180,6 +181,7 @@ function serveSitemap(): string {
             <priority>0.8</priority>
         </url>`).join('');
 
+    // noinspection HttpUrlsUsage
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${homepageUrl}
@@ -243,10 +245,10 @@ try {
     console.error('Failed to load existing sitemap from', sitemapPath, ':', error);
 }
 
-// Bootstrap sitemap with existing annotations only if sitemap file doesn't exist
+// Bootstrap sitemap with existing annotations only if the sitemap file doesn't exist
 if (!fs.existsSync(sitemapPath)) {
     console.log('No sitemap file found, running bootstrapSitemap...');
-    bootstrapSitemap();
+    bootstrapSitemap().then(() => console.log('Bootstrap sitemap completed with', sitemapUrls.size, 'URLs')).catch(error => console.error('Error bootstrapping sitemap:', error));
 } else {
     console.log('Sitemap file exists, skipping bootstrapSitemap to preserve existing sitemap');
 }
@@ -526,8 +528,16 @@ app.get('/', (req: Request, res: Response) => {
             }
             const baseViewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
             const viewUrl = appendUtmParams(baseViewUrl, req.query);
-            const displayText = new URL(originalUrl).hostname + originalUrl.split('/').slice(3).join('/');
-            return `<li><a href="${viewUrl}" class="annotation-link">${displayText}</a></li>`;
+            // Format timestamp as a human-readable date (e.g., "May 30, 2025, 5:44 PM")
+            const timestampText = new Date(entry.timestamp).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+            return `<li><a href="${viewUrl}" class="annotation-link">Annotation from ${timestampText}</a></li>`;
         })
         .filter(Boolean)
         .join('');
@@ -563,7 +573,6 @@ app.get('/', (req: Request, res: Response) => {
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
             margin: 0 auto;
             padding: 20px;
             line-height: 1.6;
@@ -575,6 +584,9 @@ app.get('/', (req: Request, res: Response) => {
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 100%;
+            box-sizing: border-box;
         }
         .header {
             display: flex;
@@ -588,11 +600,11 @@ app.get('/', (req: Request, res: Response) => {
         }
         h1 {
             color: #333;
-            font-size: 1.8em;
+            font-size: 1.8rem;
         }
         p {
             color: #444;
-            font-size: 16px;
+            font-size: 1rem;
         }
         .cta {
             display: inline-block;
@@ -613,7 +625,7 @@ app.get('/', (req: Request, res: Response) => {
         }
         .annotations h2 {
             color: #333;
-            font-size: 1.4em;
+            font-size: 1.4rem;
             margin-bottom: 10px;
         }
         .annotations ul {
@@ -626,9 +638,36 @@ app.get('/', (req: Request, res: Response) => {
         .annotation-link {
             color: #7593f4;
             text-decoration: none;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .annotation-link:hover {
             text-decoration: underline;
+        }
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            .annotations h2 {
+                font-size: 1.2rem;
+            }
+            p, .annotation-link {
+                font-size: 0.9rem;
+            }
+            .cta {
+                padding: 8px 16px;
+                font-size: 0.9rem;
+            }
         }
     </style>
 </head>
