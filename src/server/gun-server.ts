@@ -280,13 +280,24 @@ function appendUtmParams(baseUrl: string, utmParams: ParsedQs): string {
     return url.toString();
 }
 
-// Serve sitemap.xml
+// Serve sitemap.xml (updated to read from file)
 app.get('/sitemap.xml', (_req: Request, res: Response) => {
     try {
-        const sitemapContent = generateSitemap();
-        res.set('Content-Type', 'application/xml');
-        res.send(sitemapContent);
-        console.log('Served sitemap.xml with', sitemapUrls.size, 'URLs');
+        console.log(`Serving sitemap.xml, in-memory sitemapUrls size: ${sitemapUrls.size}, URLs:`, Array.from(sitemapUrls).map(entry => entry.url));
+        // Try reading from file first
+        if (fs.existsSync(sitemapPath)) {
+            const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
+            console.log(`Read sitemap from ${sitemapPath}, content length: ${sitemapContent.length} bytes`);
+            res.set('Content-Type', 'application/xml');
+            res.send(sitemapContent);
+            console.log('Served sitemap.xml from file with', sitemapUrls.size, 'URLs');
+        } else {
+            console.warn(`Sitemap file not found at ${sitemapPath}, generating dynamically`);
+            const sitemapContent = generateSitemap();
+            res.set('Content-Type', 'application/xml');
+            res.send(sitemapContent);
+            console.log('Served sitemap.xml dynamically with', sitemapUrls.size, 'URLs');
+        }
     } catch (error) {
         console.error('Error serving sitemap.xml:', error);
         res.status(500).send('Internal server error');
@@ -652,7 +663,6 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
                     metadata: annotation.metadata || {},
                     isDeleted: annotation.isDeleted || false,
                 });
-                // Add to sitemap
                 addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
             };
 
@@ -778,7 +788,6 @@ app.get('/api/page-metadata', async (req: Request, res: Response) => {
 
     try {
         const metadata: Metadata = await fetchPageMetadata(url);
-        // Fetch annotations to add to sitemap
         const cleanUrl = new URL(url).href;
         const {domainShard, subShard} = getShardKey(cleanUrl);
         const annotationNodes = [
@@ -860,7 +869,6 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             return res.status(404).send('Annotation or screenshot not found');
         }
 
-        // Add to sitemap
         addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
 
         console.log(`[DEBUG] Annotation screenshot found, length: ${annotation.screenshot.length}`);
@@ -974,7 +982,6 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
             return res.status(404).send('Annotation not found');
         }
 
-        // Add to sitemap
         addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
 
         console.log(`[DEBUG] Annotation found:`, annotationId);
@@ -1169,7 +1176,6 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
             return res.status(404).send('Annotation not found');
         }
 
-        // Add to sitemap
         addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
 
         console.log(`[DEBUG] Annotation found:`, annotationId);
