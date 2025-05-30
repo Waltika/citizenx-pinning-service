@@ -9,6 +9,7 @@ import {verifyGunWrite} from './utils/verifyGunWrite.js';
 import {limiter, PeerData} from './utils/rateLimit.js';
 import {Annotation, Metadata} from './utils/types.js';
 import {stripHtml} from "./utils/stripHtml.js";
+import { ParsedQs } from 'qs';
 import sharp from 'sharp';
 
 // Profile cache
@@ -185,8 +186,8 @@ async function bootstrapSitemap(): Promise<void> {
         // Dynamically discover all annotation shards with fallback
         const domains: string[] = ['x_com']; // Fallback to ensure x_com is scanned
         await new Promise<void>((resolve) => {
-            gun.get('').map().once((data: any, key: string) => {
-                if (!key || typeof key !== 'string' || key.length === 0) {
+            gun.get('').map().once((_data: any, key: string) => {
+                if (!key || key.length === 0) {
                     console.warn(`Skipping invalid key: ${key}`);
                     return;
                 }
@@ -253,6 +254,19 @@ async function bootstrapSitemap(): Promise<void> {
     }
 }
 
+function appendUtmParams(baseUrl: string, utmParams: ParsedQs): string {
+    const url = new URL(baseUrl);
+    const validUtmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    validUtmKeys.forEach(key => {
+        const value = utmParams[key];
+        if (typeof value === 'string') {
+            url.searchParams.set(key, value);
+        }
+    });
+    return url.toString();
+}
+
+// Homepage route
 app.get('/', (req: Request, res: Response) => {
     // Generate recent annotations list (limit to 10)
     const recentAnnotations = Array.from(sitemapUrls).slice(0, 10).map(url => {
@@ -267,10 +281,14 @@ app.get('/', (req: Request, res: Response) => {
             console.error(`[DEBUG] Failed to decode base64Url: ${base64Url}`, error);
             return '';
         }
-        const viewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+        const baseViewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+        const viewUrl = appendUtmParams(baseViewUrl, req.query);
         const displayText = new URL(originalUrl).hostname + originalUrl.split('/').slice(3).join('/');
         return `<li><a href="${viewUrl}" class="annotation-link">${displayText}</a></li>`;
     }).filter(Boolean).join('');
+
+    const ctaUrl = appendUtmParams('https://citizenx.app', req.query);
+    const logoUrl = appendUtmParams('https://citizenx.app', req.query);
 
     const html = `
 <!DOCTYPE html>
@@ -373,13 +391,13 @@ app.get('/', (req: Request, res: Response) => {
 <body>
     <div class="container">
         <div class="header">
-            <a href="https://citizenx.app">
+            <a href="${logoUrl}">
                 <img src="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png" alt="CitizenX Logo" class="logo">
             </a>
         </div>
         <h1>CitizenX Annotations</h1>
         <p>This service hosts web annotations created with CitizenX, a platform for collaborative web commentary.</p>
-        <p><a href="https://citizenx.app" class="cta">Visit CitizenX to Start Annotating</a></p>
+        <p><a href="${ctaUrl}" class="cta">Visit CitizenX to Start Annotating</a></p>
         <p>Explore existing annotations via our <a href="/sitemap.xml">sitemap</a>.</p>
         ${recentAnnotations ? `
         <div class="annotations">
@@ -395,7 +413,7 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Serve sitemap.xml
-app.get('/sitemap.xml', (req: Request, res: Response) => {
+app.get('/sitemap.xml', (_req: Request, res: Response) => {
     try {
         const sitemapContent = generateSitemap();
         res.set('Content-Type', 'application/xml');
@@ -408,7 +426,7 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
 });
 
 // Debug endpoint to rebuild sitemap
-app.get('/api/debug/rebuild-sitemap', async (req: Request, res: Response) => {
+app.get('/api/debug/rebuild-sitemap', async (_req: Request, res: Response) => {
     console.log('Rebuilding sitemap via debug endpoint...');
     sitemapUrls.clear();
     await bootstrapSitemap();
@@ -985,6 +1003,7 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
     }
 });
 
+// Annotation page route
 app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /:annotationId/:base64Url called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
 
@@ -1050,7 +1069,8 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
             ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png`
             : metadata.ogImage || defaultImage;
         const canonicalUrl = `${publicUrl}/${annotationId}/${base64Url}`;
-        const viewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+        const baseViewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+        const viewUrl = appendUtmParams(baseViewUrl, req.query);
 
         const keywords = annotationNoHTML
             .split(/\s+/)
@@ -1078,6 +1098,14 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     <meta name="twitter:description" content="${description}">
     <meta name="twitter:image" content="${image}">
     <link rel="canonical" href="${canonicalUrl}">
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-YDDS5BJ90C"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-YDDS5BJ90C');
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -1166,6 +1194,7 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     }
 });
 
+// View annotation page route
 app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /viewannotation called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
     console.log(`[DEBUG] Request headers:`, req.headers);
@@ -1233,6 +1262,11 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
             ? metadata.ogImage
             : annotation.screenshot ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png` : defaultImage;
 
+        const baseCheckExtensionUrl = `${websiteUrl}/check-extension?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+        const baseViewAnnotationsUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+        const checkExtensionUrl = appendUtmParams(baseCheckExtensionUrl, req.query);
+        const viewAnnotationsUrl = appendUtmParams(baseViewAnnotationsUrl, req.query);
+
         const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -1251,6 +1285,14 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
     <meta name="twitter:description" content="${description}">
     <meta name="twitter:image" content="${image}">
     <link rel="canonical" href="${cleanUrl}">
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-YDDS5BJ90C"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-YDDS5BJ90C');
+    </script>
 </head>
 <body>
     <script>
@@ -1269,9 +1311,9 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
                 console.log('[DEBUG] Browser detection: isChrome=', isChrome);
                 console.log('Original URL: ${originalUrl}');
                 if (isChrome) {
-                    redirect('${websiteUrl}/check-extension?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}');
+                    redirect('${checkExtensionUrl}');
                 } else {
-                    redirect('${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}');
+                    redirect('${viewAnnotationsUrl}');
                 }
             }, 500);
         })();
