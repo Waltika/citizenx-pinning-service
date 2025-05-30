@@ -150,15 +150,18 @@ ${annotationUrls}
 
 function serveSitemap(): string {
 
-    let sitemapDate = new Date();
+    let sitemapDate: Date | null = null;
     Array.from(sitemapUrls)
         .map(entry => {
             let annotationDate: Date = new Date(entry.timestamp);
-            if (annotationDate > sitemapDate) {
+            if (sitemapDate == null || annotationDate > sitemapDate) {
                 sitemapDate = annotationDate;
             }
         });
 
+    if (sitemapDate == null) {
+        sitemapDate = new Date();
+    }
     // Add root URL dynamically with daily frequency
     const homepageUrl = `
     <url>
@@ -228,7 +231,7 @@ try {
             const lastmodMatch = entry.match(/<lastmod>(.*?)<\/lastmod>/);
             const url = locMatch ? locMatch[1] : null;
             const timestamp = lastmodMatch ? new Date(lastmodMatch[1]).getTime() : Date.now(); // Fallback to now if no lastmod
-            return url && url !== `${publicUrl}/` ? { url, timestamp } : null;
+            return url && url !== `${publicUrl}/` ? {url, timestamp} : null;
         }).filter(item => item !== null); // Exclude root URL and invalid entries
         sitemapUrls = new Set(urls);
         console.log('Loaded existing sitemap from', sitemapPath, 'with', sitemapUrls.size, 'URLs');
