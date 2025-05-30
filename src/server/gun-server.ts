@@ -130,17 +130,33 @@ interface SitemapEntry {
 let sitemapUrls: Set<SitemapEntry> = new Set();
 
 function generateSitemap(): string {
+    // Only include annotation URLs, exclude root URL
+    const annotationUrls = Array.from(sitemapUrls)
+        .map(entry => `
+        <url>
+            <loc>${entry.url}</loc>
+            <lastmod>${new Date(entry.timestamp).toISOString()}</lastmod>
+            <changefreq>daily</changefreq>
+            <priority>0.8</priority>
+        </url>`).join('');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${annotationUrls}
+</urlset>`;
+}
+
+function serveSitemap(): string {
+    // Add root URL dynamically with daily frequency
     const homepageUrl = `
     <url>
         <loc>${publicUrl}/</loc>
         <lastmod>${new Date().toISOString()}</lastmod>
-        <changefreq>monthly</changefreq>
+        <changefreq>daily</changefreq>
         <priority>0.6</priority>
     </url>`;
 
-    // Filter out root URL to prevent duplicates
     const annotationUrls = Array.from(sitemapUrls)
-        .filter(entry => entry.url !== `${publicUrl}/`)
         .map(entry => `
         <url>
             <loc>${entry.url}</loc>
@@ -297,19 +313,18 @@ function appendUtmParams(baseUrl: string, utmParams: ParsedQs): string {
 app.get('/sitemap.xml', (_req: Request, res: Response) => {
     try {
         console.log(`Serving sitemap.xml, in-memory sitemapUrls size: ${sitemapUrls.size}, URLs:`, Array.from(sitemapUrls).map(entry => entry.url));
+        let sitemapContent: string;
         if (fs.existsSync(sitemapPath)) {
-            const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
-            console.log(`Read sitemap from ${sitemapPath}, content length: ${sitemapContent.length} bytes`);
-            res.set('Content-Type', 'application/xml');
-            res.send(sitemapContent);
-            console.log('Served sitemap.xml from file with', sitemapUrls.size, 'URLs');
+            sitemapContent = serveSitemap();
+            console.log(`Generated sitemap with root URL, content length: ${sitemapContent.length} bytes`);
         } else {
             console.warn(`Sitemap file not found at ${sitemapPath}, generating dynamically`);
-            const sitemapContent = generateSitemap();
-            res.set('Content-Type', 'application/xml');
-            res.send(sitemapContent);
-            console.log('Served sitemap.xml dynamically with', sitemapUrls.size, 'URLs');
+            sitemapContent = serveSitemap();
+            console.log(`Generated dynamic sitemap with root URL, content length: ${sitemapContent.length} bytes`);
         }
+        res.set('Content-Type', 'application/xml');
+        res.send(sitemapContent);
+        console.log('Served sitemap.xml with', sitemapUrls.size, 'URLs plus root URL');
     } catch (error) {
         console.error('Error serving sitemap.xml:', error);
         res.status(500).send('Internal server error');
@@ -560,7 +575,7 @@ app.get('/', (req: Request, res: Response) => {
         .cta {
             display: inline-block;
             padding: 10px 20px;
-            background-color: #184b7e;
+            background-color: #000000;
             color: white;
             text-decoration: none;
             border-radius: 6px;
