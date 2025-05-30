@@ -9,7 +9,7 @@ import {verifyGunWrite} from './utils/verifyGunWrite.js';
 import {limiter, PeerData} from './utils/rateLimit.js';
 import {Annotation, Metadata} from './utils/types.js';
 import {stripHtml} from "./utils/stripHtml.js";
-import { ParsedQs } from 'qs';
+import {ParsedQs} from 'qs';
 import sharp from 'sharp';
 
 // Profile cache
@@ -123,10 +123,12 @@ const gun: any = (Gun as any)({
 
 // Sitemap management
 const sitemapPath = '/var/data/sitemap.xml';
+
 interface SitemapEntry {
     url: string;
     timestamp: number; // Store annotation timestamp
 }
+
 let sitemapUrls: Set<SitemapEntry> = new Set();
 
 function generateSitemap(): string {
@@ -147,11 +149,21 @@ ${annotationUrls}
 }
 
 function serveSitemap(): string {
+
+    let sitemapDate = new Date();
+    Array.from(sitemapUrls)
+        .map(entry => {
+            let annotationDate: Date = new Date(entry.timestamp);
+            if (annotationDate > sitemapDate) {
+                sitemapDate = annotationDate;
+            }
+        });
+
     // Add root URL dynamically with daily frequency
     const homepageUrl = `
     <url>
         <loc>${publicUrl}/</loc>
-        <lastmod>${new Date().toISOString()}</lastmod>
+        <lastmod>${sitemapDate}</lastmod>
         <changefreq>daily</changefreq>
         <priority>0.6</priority>
     </url>`;
@@ -194,12 +206,12 @@ function addAnnotationToSitemap(annotationId: string, annotationUrl: string, tim
     }
     const existingEntry = Array.from(sitemapUrls).find(entry => entry.url === sitemapUrl);
     if (!existingEntry) {
-        sitemapUrls.add({ url: sitemapUrl, timestamp });
+        sitemapUrls.add({url: sitemapUrl, timestamp});
         updateSitemap();
         console.log(`Added annotation to sitemap: ${sitemapUrl}, Timestamp: ${new Date(timestamp).toISOString()}`);
     } else if (existingEntry.timestamp !== timestamp) {
         sitemapUrls.delete(existingEntry);
-        sitemapUrls.add({ url: sitemapUrl, timestamp });
+        sitemapUrls.add({url: sitemapUrl, timestamp});
         updateSitemap();
         console.log(`Updated annotation timestamp in sitemap: ${sitemapUrl}, New Timestamp: ${new Date(timestamp).toISOString()}`);
     }
@@ -212,7 +224,7 @@ try {
         const urls = sitemapContent.match(/<loc>(.*?)<\/loc>/g)?.map(loc => loc.replace(/<loc>|<\/loc>/g, '')) || [];
         sitemapUrls = new Set(urls
             .filter(url => url !== `${publicUrl}/`) // Exclude root URL
-            .map(url => ({ url, timestamp: Date.now() })));
+            .map(url => ({url, timestamp: Date.now()})));
         console.log('Loaded existing sitemap from', sitemapPath, 'with', sitemapUrls.size, 'URLs');
     } else {
         console.log('No existing sitemap found at', sitemapPath, ', starting with empty sitemap');
@@ -336,7 +348,7 @@ app.get('/api/debug/rebuild-sitemap', async (_req: Request, res: Response) => {
     console.log('Rebuilding sitemap via debug endpoint...');
     sitemapUrls.clear();
     await bootstrapSitemap();
-    res.json({ message: 'Sitemap rebuilt successfully', urlCount: sitemapUrls.size });
+    res.json({message: 'Sitemap rebuilt successfully', urlCount: sitemapUrls.size});
     console.log('Debug sitemap rebuild completed with', sitemapUrls.size, 'URLs');
 });
 
@@ -937,8 +949,8 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
             console.log(`[DEBUG] Cropping to ${cropWidth}x${cropHeight} at (${left}, ${top})`);
 
             const processedBuffer = await sharp(imageBuffer)
-                .extract({ left, top, width: cropWidth, height: cropHeight })
-                .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
+                .extract({left, top, width: cropWidth, height: cropHeight})
+                .resize({width: targetWidth, height: targetHeight, fit: 'fill'})
                 .toFormat("png")
                 .toBuffer();
 
