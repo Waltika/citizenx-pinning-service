@@ -560,7 +560,7 @@ app.get('/', (req: Request, res: Response) => {
         .cta {
             display: inline-block;
             padding: 10px 20px;
-            background-color: #000000;
+            background-color: #184b7e;
             color: white;
             text-decoration: none;
             border-radius: 6px;
@@ -568,7 +568,7 @@ app.get('/', (req: Request, res: Response) => {
             transition: background-color 0.3s ease;
         }
         .cta:hover {
-            background-color: #1c1b1b;
+            background-color: #393b3c;
         }
         .annotations {
             text-align: left;
@@ -587,7 +587,7 @@ app.get('/', (req: Request, res: Response) => {
             margin-bottom: 8px;
         }
         .annotation-link {
-            color: #1976d2;
+            color: #7593f4;
             text-decoration: none;
         }
         .annotation-link:hover {
@@ -1095,7 +1095,7 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
             display: inline-flex;
             align-items: center;
             padding: 10px 20px;
-            background-color: #1976d2;
+            background-color: #000000;
             color: white;
             text-decoration: none;
             border-radius: 6px;
@@ -1103,7 +1103,7 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
             transition: background-color 0.3s ease;
         }
         .view-link:hover {
-            background-color: #1565c0;
+            background-color: #393b3c;
         }
     </style>
 </head>
