@@ -226,18 +226,21 @@ function addAnnotationToSitemap(annotationId: string, annotationUrl: string, tim
 try {
     if (fs.existsSync(sitemapPath)) {
         const sitemapContent = fs.readFileSync(sitemapPath, 'utf8');
-        // Match <url> entries and extract <loc> and <lastmod>
-        const urlEntries = sitemapContent.match(/<url>(.*?)<loc>(.*?)<\/loc>(.*?)<lastmod>(.*?)<\/lastmod>(.*?)<\/url>/g) || [];
-        console.log('Loaded existing sitemap from', sitemapPath, 'with', urlEntries.length, 'URLs');
+        // Match <url> entries with flexible content
+        const urlEntries = sitemapContent.match(/<url>\s*([\s\S]*?)\s*<\/url>/g) || [];
         const urls = urlEntries.map(entry => {
             const locMatch = entry.match(/<loc>(.*?)<\/loc>/);
             const lastmodMatch = entry.match(/<lastmod>(.*?)<\/lastmod>/);
             const url = locMatch ? locMatch[1] : null;
-            const timestamp = lastmodMatch ? new Date(lastmodMatch[1]).getTime() : Date.now(); // Fallback to now if no lastmod
-            return url && url !== `${publicUrl}/` ? {url, timestamp} : null;
+            let timestamp = Date.now(); // Fallback
+            if (lastmodMatch) {
+                const parsedDate = new Date(lastmodMatch[1]);
+                timestamp = isNaN(parsedDate.getTime()) ? Date.now() : parsedDate.getTime();
+            }
+            return url && url !== `${publicUrl}/` ? { url, timestamp } : null;
         }).filter(item => item !== null); // Exclude root URL and invalid entries
         sitemapUrls = new Set(urls);
-        console.log('In Memory sitemap Set with', sitemapUrls.size, 'URLs');
+        console.log('Loaded existing sitemap from', sitemapPath, 'with', sitemapUrls.size, 'URLs');
     } else {
         console.log('No existing sitemap found at', sitemapPath, ', starting with empty sitemap');
     }
