@@ -531,7 +531,7 @@ app.get('/', (req: Request, res: Response) => {
             }
             const baseViewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
             const viewUrl = appendUtmParams(baseViewUrl, req.query);
-            // Format timestamp as a human-readable date (e.g., "May 30, 2025, 5:44 PM")
+            // Format timestamp as human-readable date (e.g., "May 29, 2025, 5:23 PM")
             const timestampText = new Date(entry.timestamp).toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -576,11 +576,14 @@ app.get('/', (req: Request, res: Response) => {
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 0 auto;
+            margin: 0;
             padding: 20px;
             line-height: 1.6;
             background-color: #f5f5f5;
-            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
         }
         .container {
             background: white;
@@ -590,6 +593,7 @@ app.get('/', (req: Request, res: Response) => {
             max-width: 800px;
             width: 100%;
             box-sizing: border-box;
+            text-align: center;
         }
         .header {
             display: flex;
@@ -670,6 +674,11 @@ app.get('/', (req: Request, res: Response) => {
             .cta {
                 padding: 8px 16px;
                 font-size: 0.9rem;
+            }
+        }
+        @media (min-width: 601px) {
+            .container {
+                margin: 0 auto;
             }
         }
     </style>
