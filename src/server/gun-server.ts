@@ -518,6 +518,7 @@ app.get('/', (req: Request, res: Response) => {
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, 10)
         .map(entry => {
+            console.log(`Listing annotation: ${entry.url}`);
             const viewUrl = appendUtmParams(entry.url, req.query);
             // Format timestamp as human-readable date (e.g., "May 29, 2025, 5:23 PM")
             const timestampText = new Date(entry.timestamp).toLocaleString('en-US', {
