@@ -1,3 +1,5 @@
+// arc/server/gun-server.ts
+
 import Gun from 'gun';
 import http from 'http';
 import express, {Express, Request, Response} from 'express';
@@ -1474,6 +1476,8 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
         res.status(500).json({error: 'Failed to shorten URL'});
     }
 });
+
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
