@@ -547,13 +547,13 @@ app.get('/', (req: Request, res: Response) => {
     <link rel="canonical" href="https://citizenx.app">
     <meta property="og:title" content="CitizenX Annotations - Service">
     <meta property="og:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
-    <meta property="og:image" content="https://citizenx.app/images/logo.png">
+    <meta property="og:image" content="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png">
     <meta property="og:url" content="https://service.citizenx.app">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="CitizenX Annotations - Service">
     <meta name="twitter:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
-    <meta name="twitter:image" content="https://citizenx.app/images/logo.png">
+    <meta name="twitter:image" content="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png">
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-YDDS5BJ90C"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
