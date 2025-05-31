@@ -516,7 +516,6 @@ function fromUrlSafeBase64(urlSafeBase64: string): string {
 app.get('/', (req: Request, res: Response) => {
     const recentAnnotations = Array.from(sitemapUrls)
         .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, 10)
         .map(entry => {
             console.log(`Listing annotation: ${entry.url}`);
             const viewUrl = appendUtmParams(entry.url, req.query);
