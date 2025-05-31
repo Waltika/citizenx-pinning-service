@@ -521,7 +521,7 @@ app.get('/', (req: Request, res: Response) => {
             const match = entry.url.match(/\/([^\/]+)\/([^\/]+)$/);
             if (!match) return '';
             const [, annotationId, base64Url] = match;
-            const baseViewUrl = `${publicUrl}/${annotationId}/${annotationId}`;
+            const baseViewUrl = `${publicUrl}/${annotationId}/${base64Url}`;
             const viewUrl = appendUtmParams(baseViewUrl, req.query);
             // Format timestamp as human-readable date (e.g., "May 29, 2025, 5:23 PM")
             const timestampText = new Date(entry.timestamp).toLocaleString('en-US', {
