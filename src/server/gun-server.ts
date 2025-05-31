@@ -521,15 +521,7 @@ app.get('/', (req: Request, res: Response) => {
             const match = entry.url.match(/\/([^\/]+)\/([^\/]+)$/);
             if (!match) return '';
             const [, annotationId, base64Url] = match;
-            let originalUrl = '';
-            try {
-                const standardBase64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                originalUrl = Buffer.from(standardBase64, 'base64').toString('utf8');
-            } catch (error) {
-                console.error(`[DEBUG] Failed to decode base64Url: ${base64Url}`, error);
-                return '';
-            }
-            const baseViewUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+            const baseViewUrl = `${publicUrl}/${annotationId}/${annotationId}`;
             const viewUrl = appendUtmParams(baseViewUrl, req.query);
             // Format timestamp as human-readable date (e.g., "May 29, 2025, 5:23 PM")
             const timestampText = new Date(entry.timestamp).toLocaleString('en-US', {
