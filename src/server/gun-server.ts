@@ -544,7 +544,8 @@ app.get('/', (req: Request, res: Response) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CitizenX Annotations - Service</title>
     <meta name="description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation and annotate the web.">
-    <link rel="canonical" href="https://citizenx.app">
+    <link rel="canonical" href="https://service.citizenx.app">
+    <link rel="icon" type="image/png" href="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png">
     <meta property="og:title" content="CitizenX Annotations - Service">
     <meta property="og:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
     <meta property="og:image" content="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png">
@@ -1101,6 +1102,7 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
+    <link rel="icon" type="image/png" href="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png">
     <meta name="description" content="${description}">
     <meta name="keywords" content="${keywords}">
     <meta name="author" content="${profile.handle}">
@@ -1291,6 +1293,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
+    <link rel="icon" type="image/png" href="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png">
     <meta name="description" content="${description}">
     <meta property="og:title" content="${title}">
     <meta property="og:description" content="${description}">
