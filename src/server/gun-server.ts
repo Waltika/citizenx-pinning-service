@@ -518,11 +518,7 @@ app.get('/', (req: Request, res: Response) => {
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, 10)
         .map(entry => {
-            const match = entry.url.match(/\/([^\/]+)\/([^\/]+)$/);
-            if (!match) return '';
-            const [, annotationId, base64Url] = match;
-            const baseViewUrl = `${publicUrl}/${annotationId}/${base64Url}`;
-            const viewUrl = appendUtmParams(baseViewUrl, req.query);
+            const viewUrl = appendUtmParams(entry.url, req.query);
             // Format timestamp as human-readable date (e.g., "May 29, 2025, 5:23 PM")
             const timestampText = new Date(entry.timestamp).toLocaleString('en-US', {
                 month: 'short',
