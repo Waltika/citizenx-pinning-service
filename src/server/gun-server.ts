@@ -95,29 +95,31 @@ const server: http.Server = http.createServer(app).listen(port, () => {
     console.log(`Gun server running on port ${port}`);
 });
 
-const baseDataDir: string = '/var/data';
+const baseDataDir: string = process.env.DATA_DIR || '/var/data';
 const dataDir: string = `${baseDataDir}/gun-data`;
 try {
     if (!fs.existsSync(baseDataDir)) {
-        fs.mkdirSync(baseDataDir, { recursive: true });
+        fs.mkdirSync(baseDataDir, {recursive: true});
         console.log('Created base data directory:', baseDataDir);
     }
     if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
+        fs.mkdirSync(dataDir, {recursive: true});
         console.log('Created data directory:', dataDir);
     }
 } catch (error) {
-    console.error('Failed to create data directories:', { baseDataDir, dataDir }, error);
+    console.error('Failed to create data directories:', {baseDataDir, dataDir}, error);
     console.warn('Data persistence may not work without a persistent disk.');
 }
 
-let shortIoApiKey: string = '';
+let shortIoApiKey: string = process.env.SHORT_IO_API_KEY || '';
+const shortKeyPath: string = `${baseDataDir}/short.key`;
 try {
-    shortIoApiKey = fs.readFileSync('/var/data/short.key', 'utf8').trim();
-    console.log('Successfully read Short.io API key from /var/data/short.key');
+    if (!shortIoApiKey && fs.existsSync(shortKeyPath)) {
+        shortIoApiKey = fs.readFileSync(shortKeyPath, 'utf8').trim();
+        console.log('Successfully read Short.io API key from', shortKeyPath);
+    }
 } catch (error) {
-    console.error('Failed to read Short.io API key from /var/data/short.key:', error);
-    shortIoApiKey = process.env.SHORT_IO_API_KEY || '';
+    console.error('Failed to read Short.io API key from', shortKeyPath, ':', error);
 }
 
 const gun: any = (Gun as any)({
@@ -129,8 +131,7 @@ const gun: any = (Gun as any)({
 });
 
 // Sitemap management
-const sitemapPath = '/var/data/sitemap.xml';
-
+const sitemapPath = `${baseDataDir}/sitemap.xml`;
 interface SitemapEntry {
     url: string;
     timestamp: number; // Store annotation timestamp
@@ -244,7 +245,7 @@ try {
                 const parsedDate = new Date(lastmodMatch[1]);
                 timestamp = isNaN(parsedDate.getTime()) ? Date.now() : parsedDate.getTime();
             }
-            return url && url !== `${publicUrl}/` ? { url, timestamp } : null;
+            return url && url !== `${publicUrl}/` ? {url, timestamp} : null;
         }).filter(item => item !== null); // Exclude root URL and invalid entries
         sitemapUrls = new Set(urls);
         console.log('Loaded existing sitemap from', sitemapPath, 'with', sitemapUrls.size, 'URLs');
@@ -1482,7 +1483,7 @@ app.post('/api/shorten', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+app.get('/health', (req, res) => res.status(200).json({status: 'ok'}));
 
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
