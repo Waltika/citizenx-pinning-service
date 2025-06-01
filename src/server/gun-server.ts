@@ -315,6 +315,12 @@ async function bootstrapSitemap(): Promise<void> {
                         }
                         console.log(`Found URL node: ${url}`);
                         gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
+
+                            if (annotation && !annotation.id) {
+                                console.log(`Adding ID to annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
+                                annotation.id = annotationId;
+                            }
+
                             if (!annotationId || !annotation || annotation.isDeleted || !annotation.id || !annotation.url || !annotation.timestamp) {
                                 console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
                                 return;
