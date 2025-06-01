@@ -316,7 +316,7 @@ async function bootstrapSitemap(): Promise<void> {
                         console.log(`Found URL node: ${url}`);
                         gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
 
-                            if (annotation && !annotation && typeof annotation !== 'object') {
+                            if (annotation && typeof annotation !== 'object' && !annotation.id) {
                                 console.log(`Adding ID to annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
                                 annotation.id = annotationId;
                             }
