@@ -74,7 +74,11 @@ function simpleHash(str: string): number {
 const port: number = parseInt(process.env.PORT || '10000', 10);
 const publicUrl: string = 'https://service.citizenx.app';
 const websiteUrl: string = 'https://citizenx.app';
-const initialPeers: string[] = [];
+const initialPeers: string[] = [
+    'https://service.citizenx.app/gun',
+    'https://s3.citizenx.app/gun',
+    'https://s2.citizenx.app/gun'
+];
 
 const app: Express = express();
 
@@ -132,6 +136,7 @@ const gun: any = (Gun as any)({
 
 // Sitemap management
 const sitemapPath = `${baseDataDir}/sitemap.xml`;
+
 interface SitemapEntry {
     url: string;
     timestamp: number; // Store annotation timestamp
