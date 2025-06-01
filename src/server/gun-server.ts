@@ -95,14 +95,19 @@ const server: http.Server = http.createServer(app).listen(port, () => {
     console.log(`Gun server running on port ${port}`);
 });
 
-const dataDir: string = '/var/data/gun-data';
+const baseDataDir: string = '/var/data';
+const dataDir: string = `${baseDataDir}/gun-data`;
 try {
+    if (!fs.existsSync(baseDataDir)) {
+        fs.mkdirSync(baseDataDir, { recursive: true });
+        console.log('Created base data directory:', baseDataDir);
+    }
     if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, {recursive: true});
+        fs.mkdirSync(dataDir, { recursive: true });
         console.log('Created data directory:', dataDir);
     }
 } catch (error) {
-    console.error('Failed to create data directory:', dataDir, error);
+    console.error('Failed to create data directories:', { baseDataDir, dataDir }, error);
     console.warn('Data persistence may not work without a persistent disk.');
 }
 
