@@ -1,14 +1,18 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import DOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
 import { Metadata } from './types.js';
 
-
+// Create a JSDOM instance and configure DOMPurify
+const { window } = new JSDOM('');
+// Use any as a fallback type assertion to bypass TypeScript error
+const purify = DOMPurify(window as any);
 
 export async function fetchPageMetadata(url: string): Promise<Metadata> {
     try {
         const response = await axios.get(url, { timeout: 5000 });
-        const cleanHtml = DOMPurify.sanitize(response.data);
+        const cleanHtml = purify.sanitize(response.data);
         const $ = cheerio.load(cleanHtml);
 
         const metadata: Metadata = {
