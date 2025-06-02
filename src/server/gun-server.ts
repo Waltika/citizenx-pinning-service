@@ -513,9 +513,14 @@ function getShardKey(url: string): { domainShard: string; subShard?: string } {
     const domain = urlObj.hostname.replace(/\./g, '_');
     const domainShard = `annotations_${domain}`;
 
-    const hash = simpleHash(cleanUrl);
-    const subShardIndex = hash % 10;
-    return {domainShard, subShard: `${domainShard}_shard_${subShardIndex}`};
+    const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
+    if (highTrafficDomains.includes(domain)) {
+        const hash = simpleHash(cleanUrl);
+        const subShardIndex = hash % 10;
+        return {domainShard, subShard: `${domainShard}_shard_${subShardIndex}`};
+    }
+
+    return {domainShard};
 }
 
 function fromUrlSafeBase64(urlSafeBase64: string): string {
