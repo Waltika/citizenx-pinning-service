@@ -513,14 +513,9 @@ function getShardKey(url: string): { domainShard: string; subShard?: string } {
     const domain = urlObj.hostname.replace(/\./g, '_');
     const domainShard = `annotations_${domain}`;
 
-    const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
-    if (highTrafficDomains.includes(domain)) {
-        const hash = simpleHash(cleanUrl);
-        const subShardIndex = hash % 10;
-        return {domainShard, subShard: `${domainShard}_shard_${subShardIndex}`};
-    }
-
-    return {domainShard};
+    const hash = simpleHash(cleanUrl);
+    const subShardIndex = hash % 10;
+    return {domainShard, subShard: `${domainShard}_shard_${subShardIndex}`};
 }
 
 function fromUrlSafeBase64(urlSafeBase64: string): string {
@@ -1037,7 +1032,6 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
     }
 });
 
-// Update /:annotationId/:base64Url to add to sitemap
 app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     console.log(`[DEBUG] /:annotationId/:base64Url called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
 
