@@ -14,7 +14,7 @@ import {stripHtml} from "./utils/stripHtml.js";
 import {ParsedQs} from 'qs';
 import sharp from 'sharp';
 import {getShardKey} from "./utils/shardUtils.js";
-import {normalizeUrl} from "@/server/utils/normalizeUrl.js";
+import {normalizeUrl} from "./utils/normalizeUrl.js";
 
 // Profile cache
 const profileCache = new Map<string, { handle: string; profilePicture?: string }>();
