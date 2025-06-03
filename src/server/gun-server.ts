@@ -14,6 +14,7 @@ import {stripHtml} from "./utils/stripHtml.js";
 import {ParsedQs} from 'qs';
 import sharp from 'sharp';
 import {getShardKey} from "./utils/shardUtils.js";
+import {normalizeUrl} from "@/server/utils/normalizeUrl.js";
 
 // Profile cache
 const profileCache = new Map<string, { handle: string; profilePicture?: string }>();
@@ -715,7 +716,7 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
             console.log(`[Timing] Cleared caches in ${cacheClearEnd - cacheClearStart}ms`);
         }
 
-        const cleanUrl = new URL(url).href;
+        const cleanUrl = normalizeUrl(new URL(url).href);
         const {domainShard, subShard} = getShardKey(cleanUrl);
         const annotationNodes = [
             gun.get(domainShard).get(cleanUrl),
@@ -877,7 +878,7 @@ app.get('/api/page-metadata', async (req: Request, res: Response) => {
 
     try {
         const metadata: Metadata = await fetchPageMetadata(url);
-        const cleanUrl = new URL(url).href;
+        const cleanUrl = normalizeUrl(new URL(url).href);
         const {domainShard, subShard} = getShardKey(cleanUrl);
         const annotationNodes = [
             gun.get(domainShard).get(cleanUrl),
@@ -928,7 +929,7 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
     }
 
     try {
-        const cleanUrl = new URL(originalUrl).href;
+        const cleanUrl = normalizeUrl(new URL(originalUrl).href);
         console.log(`[DEBUG] Cleaned URL: ${cleanUrl}`);
         const {domainShard, subShard} = getShardKey(cleanUrl);
         console.log(`[DEBUG] Sharding: domainShard=${domainShard}, subShard=${subShard}`);
@@ -1041,7 +1042,7 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
     }
 
     try {
-        const cleanUrl = new URL(originalUrl).href;
+        const cleanUrl = normalizeUrl(new URL(originalUrl).href);
         console.log(`[DEBUG] Cleaned URL: ${cleanUrl}`);
         const {domainShard, subShard} = getShardKey(cleanUrl);
         console.log(`[DEBUG] Sharding: domainShard=${domainShard}, subShard=${subShard}`);
@@ -1236,7 +1237,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
     }
 
     try {
-        const cleanUrl = new URL(originalUrl).href;
+        const cleanUrl = normalizeUrl(new URL(originalUrl).href);
         console.log(`[DEBUG] Cleaned URL: ${cleanUrl}`);
         const {domainShard, subShard} = getShardKey(cleanUrl);
         console.log(`[DEBUG] Sharding: domainShard=${domainShard}, subShard=${subShard}`);
