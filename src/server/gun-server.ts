@@ -13,7 +13,7 @@ import {Annotation, Metadata} from './utils/types.js';
 import {stripHtml} from "./utils/stripHtml.js";
 import {ParsedQs} from 'qs';
 import sharp from 'sharp';
-import {getShardKey} from "@/server/utils/shardUtils.js";
+import {getShardKey} from "./utils/shardUtils.js";
 
 // Profile cache
 const profileCache = new Map<string, { handle: string; profilePicture?: string }>();
