@@ -742,6 +742,7 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
                 annotationCache.set(cacheKey, Date.now());
                 setTimeout(() => annotationCache.delete(cacheKey), ANNOTATION_CACHE_TTL);
                 annotations.push({
+                    comments : annotation.comments,
                     id: annotation.id,
                     url: annotation.url,
                     content: annotation.content,
@@ -1373,6 +1374,7 @@ app.get('/api/debug/annotations', async (req: Request, res: Response) => {
                     node.get(annotationId as string).once((annotation: any) => {
                         if (annotation) {
                             annotationData.annotation = {
+                                comments : annotation.comments,
                                 id: annotationId as string,
                                 url: annotation.url,
                                 content: annotation.content,
