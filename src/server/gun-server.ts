@@ -729,7 +729,7 @@ app.get('/api/annotations', async (req: Request, res: Response) => {
 
         await new Promise<void>((resolve) => {
             const onAnnotation = (annotation: any) => {
-                if (!annotation || !annotation.id || !annotation.content || !annotation.author || !annotation.timestamp) {
+                if (!annotation || !annotation.id || !annotation.url || !annotation.content || !annotation.author || !annotation.timestamp) {
                     return;
                 }
                 const cacheKey = `${cleanUrl}:${annotation.id}`;
@@ -954,7 +954,7 @@ app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: R
 
         const annotation = annotations.find(a => a !== null) || null;
 
-        if (!annotation || !annotation.screenshot) {
+        if (!annotation || !annotation.screenshot || !annotation.url) {
             console.log(`[DEBUG] No annotation or screenshot found for annotationId: ${annotationId}, url: ${cleanUrl}`);
             return res.status(404).send('Annotation or screenshot not found');
         }
@@ -1066,7 +1066,7 @@ app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
             )
         );
 
-        if (!annotation) {
+        if (!annotation || !annotation.url) {
             console.log(`[DEBUG] No annotation found for annotationId: ${annotationId}, url: ${cleanUrl}`);
             return res.status(404).send('Annotation not found');
         }
@@ -1261,7 +1261,7 @@ app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Re
             )
         );
 
-        if (!annotation) {
+        if (!annotation || !annotation.url) {
             console.log(`[DEBUG] No annotation found for annotationId: ${annotationId}, url: ${cleanUrl}`);
             return res.status(404).send('Annotation not found');
         }
