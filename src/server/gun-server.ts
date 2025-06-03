@@ -13,6 +13,7 @@ import {Annotation, Metadata} from './utils/types.js';
 import {stripHtml} from "./utils/stripHtml.js";
 import {ParsedQs} from 'qs';
 import sharp from 'sharp';
+import {getShardKey} from "@/server/utils/shardUtils.js";
 
 // Profile cache
 const profileCache = new Map<string, { handle: string; profilePicture?: string }>();
@@ -501,27 +502,6 @@ gun.on('hi', (peer: { url?: string }) => {
         });
     }
 });
-
-function getShardKey(url: string): { domainShard: string; subShard?: string } {
-    let cleanUrl: string;
-    try {
-        cleanUrl = new URL(url).href;
-    } catch {
-        cleanUrl = url.startsWith('http') ? url : `https://${url}`;
-    }
-    const urlObj = new URL(cleanUrl);
-    const domain = urlObj.hostname.replace(/\./g, '_');
-    const domainShard = `annotations_${domain}`;
-
-    const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
-    if (highTrafficDomains.includes(domain)) {
-        const hash = simpleHash(cleanUrl);
-        const subShardIndex = hash % 10;
-        return {domainShard, subShard: `${domainShard}_shard_${subShardIndex}`};
-    }
-
-    return {domainShard};
-}
 
 function fromUrlSafeBase64(urlSafeBase64: string): string {
     let base64 = urlSafeBase64.replace(/-/g, '+').replace(/_/g, '/');
