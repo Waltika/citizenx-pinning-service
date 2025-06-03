@@ -2,7 +2,7 @@ import {Express, Request, Response} from "express";
 import {clearProfileCache, getProfileWithRetries} from "../../data/getProfileWithRetries.js";
 import {normalizeUrl} from "../../utils/normalizeUrl.js";
 import {getShardKey} from "../../utils/shardUtils.js";
-import {Annotation, Metadata} from "../../../types/types.js";
+import {Annotation, Metadata} from "../../types/types.js";
 import {addAnnotationToSitemap} from "../../utils/sitemap/addAnnotationsToSitemap.js";
 import {fetchPageMetadata} from "../../utils/fetchPageMetadata.js";
 import {throttleLog} from "../../utils/throttleLog.js";

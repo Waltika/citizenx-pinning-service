@@ -1,5 +1,5 @@
 import {Express, Request, Response} from "express";
-import {Metadata} from "../../types/types.js";
+import {Metadata} from "../types/types.js";
 import {fetchPageMetadata} from "../utils/fetchPageMetadata.js";
 import {normalizeUrl} from "../utils/normalizeUrl.js";
 import {getShardKey} from "../utils/shardUtils.js";

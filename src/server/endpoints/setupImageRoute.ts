@@ -2,7 +2,7 @@ import {Express, Request, Response} from "express";
 import {fromUrlSafeBase64} from "../utils/fromUrlSafeBase64.js";
 import {normalizeUrl} from "../utils/normalizeUrl.js";
 import {getShardKey} from "../utils/shardUtils.js";
-import {Annotation} from "../../types/types.js";
+import {Annotation} from "../types/types.js";
 import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.js";
 import sharp from "sharp";
 

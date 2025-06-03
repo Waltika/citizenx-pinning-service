@@ -4,7 +4,7 @@ import {normalizeUrl} from "../utils/normalizeUrl.js";
 import {getShardKey} from "../utils/shardUtils.js";
 import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.js";
 import {getProfileWithRetries} from "../data/getProfileWithRetries.js";
-import {Metadata} from "../../types/types.js";
+import {Metadata} from "../types/types.js";
 import {fetchPageMetadata} from "../utils/fetchPageMetadata.js";
 import {stripHtml} from "../utils/stripHtml.js";
 import {publicUrl, websiteUrl} from "../config/index.js";

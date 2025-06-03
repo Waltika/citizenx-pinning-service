@@ -1,6 +1,6 @@
 import {Express, Request, Response} from "express";
 import {getShardKey} from "../../../utils/shardUtils.js";
-import {Annotation} from "../../../../types/types.js";
+import {Annotation} from "../../../types/types.js";
 import axios from "axios";
 import fs from "fs";
 import {baseDataDir} from "../../../config/index.js";

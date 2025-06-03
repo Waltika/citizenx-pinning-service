@@ -1,7 +1,7 @@
 import {Express, Request, Response} from "express";
 import {normalizeUrl} from "../utils/normalizeUrl.js";
 import {getShardKey} from "../utils/shardUtils.js";
-import {Metadata} from "../../types/types.js";
+import {Metadata} from "../types/types.js";
 import {fetchPageMetadata} from "../utils/fetchPageMetadata.js";
 import {stripHtml} from "../utils/stripHtml.js";
 import {fromUrlSafeBase64} from "../utils/fromUrlSafeBase64.js";

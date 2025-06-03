@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
-import { Metadata } from '../../types/types.js';
+import { Metadata } from '../types/types.js';
 
 // Create a JSDOM instance and configure DOMPurify
 const { window } = new JSDOM('');

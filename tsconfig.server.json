@@ -7,14 +7,14 @@
     "rootDir": "src/server",
     "typeRoots": [
       "./node_modules/@types",
-      "./src/types"
+      "./src/server/types"
     ]
   },
   "include": [
     "src/server/**/*.ts",
     "src/server/**/*.js",
-    "src/types/**/*.ts",
-    "src/types/**/*.js"
+    "src/server/types/**/*.ts",
+    "src/server/types/**/*.js"
   ],
   "exclude": [
     "src/components/**/*",
