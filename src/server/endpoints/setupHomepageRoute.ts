@@ -3,23 +3,16 @@ import {sitemapUrls} from "../utils/sitemap/addAnnotationsToSitemap.js";
 import {appendUtmParams} from "../utils/appendUtmParams.js";
 
 export function setupHomepageRoute(app: Express) {
-// Homepage route
     app.get('/', (req: Request, res: Response) => {
         const recentAnnotations = Array.from(sitemapUrls)
             .sort((a, b) => b.timestamp - a.timestamp)
             .map(entry => {
                 console.log(`Listing annotation: ${entry.url}`);
                 const viewUrl = appendUtmParams(entry.url, req.query);
-                // Format timestamp as human-readable date (e.g., "May 29, 2025, 5:23 PM")
-                const timestampText = new Date(entry.timestamp).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                });
-                return `<li><a href="${viewUrl}" class="annotation-link">Annotation from ${timestampText}</a></li>`;
+                const anchorText = entry.anchorText || `Annotation from ${new Date(entry.timestamp).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                })}`;
+                return `<li><a href="${viewUrl}" class="annotation-link">${anchorText}</a></li>`;
             })
             .filter(Boolean)
             .join('');
@@ -134,7 +127,6 @@ export function setupHomepageRoute(app: Express) {
         .annotation-link:hover {
             text-decoration: underline;
         }
-        /* Responsive adjustments */
         @media (max-width: 600px) {
             body {
                 padding: 10px;

@@ -63,7 +63,7 @@ export function setupAnnotationRoute(app: Express, gun: any) {
                 return res.status(404).send('Annotation not found');
             }
 
-            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
 
             console.log(`[DEBUG] Annotation found:`, annotationId);
             const profile = await getProfileWithRetries(gun, annotation.author);
@@ -72,7 +72,10 @@ export function setupAnnotationRoute(app: Express, gun: any) {
             console.log(`[DEBUG] Fetched metadata for url: ${cleanUrl}, metadata:`, metadata);
             const annotationNoHTML = stripHtml(annotation.content);
             const description = annotationNoHTML.length > 160 ? `${annotationNoHTML.slice(0, 157)}...` : annotationNoHTML;
-            const title = `${profile.handle}'s Annotation on ${new URL(cleanUrl).hostname}`;
+
+            // Use title from annotation, fallback to hostname-based title
+            const title = annotation.title || `Annotation on ${new URL(cleanUrl).hostname}`;
+
             const defaultImage = 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png';
             const image = annotation.screenshot
                 ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png`

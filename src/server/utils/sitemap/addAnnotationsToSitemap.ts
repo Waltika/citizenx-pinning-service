@@ -1,29 +1,58 @@
 import fs from 'fs';
 import { baseDataDir, publicUrl } from '../../config/index.js';
 import { queueIndexNowUrls, submitIndexNowUrls } from './indexnow.js';
-import {generateSitemap} from "./generateSitemap.js";
-
-export interface SitemapEntry {
-    url: string;
-    timestamp: number;
-}
+import { SitemapEntry } from '../../types/types.js';
 
 export const sitemapUrls: Set<SitemapEntry> = new Set();
 const sitemapPath = `${baseDataDir}/sitemap.xml`;
+
+function generateSitemap(): string {
+    let sitemapDate: Date | null = null;
+    Array.from(sitemapUrls).forEach(entry => {
+        let annotationDate: Date = new Date(entry.timestamp);
+        if (sitemapDate == null || annotationDate > sitemapDate) {
+            sitemapDate = annotationDate;
+        }
+    });
+
+    if (sitemapDate == null) {
+        sitemapDate = new Date();
+    }
+    const homepageUrl = `
+    <url>
+        <loc>${publicUrl}/</loc>
+        <lastmod>${sitemapDate.toISOString()}</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>0.6</priority>
+    </url>`;
+
+    const annotationUrls = Array.from(sitemapUrls)
+        .map(entry => `
+        <url>
+            <loc>${entry.url}</loc>
+            <lastmod>${new Date(entry.timestamp).toISOString()}</lastmod>
+            <changefreq>daily</changefreq>
+            <priority>0.8</priority>
+        </url>`).join('');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${homepageUrl}
+${annotationUrls}
+</urlset>`;
+}
 
 function updateSitemap(): void {
     try {
         fs.writeFileSync(sitemapPath, generateSitemap());
         console.log('Sitemap updated successfully at', sitemapPath, 'with', sitemapUrls.size, 'URLs');
-        // Submit queued URLs to IndexNow after sitemap update
         submitIndexNowUrls().catch(err => console.error('[IndexNow] Submission error:', err));
     } catch (error) {
         console.error('Failed to update sitemap at', sitemapPath, ':', error);
     }
 }
 
-// Helper to add annotation to sitemap
-export function addAnnotationToSitemap(annotationId: string, annotationUrl: string, timestamp: number): void {
+export async function addAnnotationToSitemap(annotationId: string, annotationUrl: string, timestamp: number, title?: string, anchorText?: string): Promise<void> {
     const base64Url = Buffer.from(annotationUrl).toString('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
@@ -33,19 +62,18 @@ export function addAnnotationToSitemap(annotationId: string, annotationUrl: stri
         console.log(`Skipped adding invalid or homepage to sitemapUrls: ${sitemapUrl}`);
         return;
     }
+
     const existingEntry = Array.from(sitemapUrls).find(entry => entry.url === sitemapUrl);
     if (!existingEntry) {
-        sitemapUrls.add({url: sitemapUrl, timestamp});
-        queueIndexNowUrls([sitemapUrl]); // Queue for IndexNow
+        sitemapUrls.add({url: sitemapUrl, timestamp, title, anchorText});
+        queueIndexNowUrls([sitemapUrl]);
         updateSitemap();
-        console.log(`Added annotation to sitemap: ${sitemapUrl}, Timestamp: ${new Date(timestamp).toISOString()}`);
-    } else if (existingEntry.timestamp !== timestamp) {
+        console.log(`Added annotation to sitemap: ${sitemapUrl}, Timestamp: ${new Date(timestamp).toISOString()}, Title: ${title || 'none'}, AnchorText: ${anchorText || 'none'}`);
+    } else if (existingEntry.timestamp !== timestamp || existingEntry.title !== title || existingEntry.anchorText !== anchorText) {
         sitemapUrls.delete(existingEntry);
-        sitemapUrls.add({url: sitemapUrl, timestamp});
-        queueIndexNowUrls([sitemapUrl]); // Queue for IndexNow
+        sitemapUrls.add({url: sitemapUrl, timestamp : timestamp, title: title, anchorText : anchorText});
+        queueIndexNowUrls([sitemapUrl]);
         updateSitemap();
-        console.log(`Updated annotation timestamp in sitemap: ${sitemapUrl}, New Timestamp: ${new Date(timestamp).toISOString()}`);
+        console.log(`Updated annotation in sitemap: ${sitemapUrl}, New Timestamp: ${new Date(timestamp).toISOString()}, Title: ${title || 'none'}, AnchorText: ${anchorText || 'none'}`);
     }
 }
-
-// ... rest of the file (generateSitemap, etc.) remains unchanged

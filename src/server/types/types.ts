@@ -33,3 +33,10 @@ export interface Annotation {
     };
     originalUrl?: string;
 }
+
+export interface SitemapEntry {
+    url: string;
+    timestamp: number;
+    title?: string;
+    anchorText?: string;
+}

@@ -1,6 +1,6 @@
 import Gun from 'gun';
 import http from 'http';
-import express, {Request, Response, Express} from 'express';
+import express, {Express, Response} from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import {limiter} from './utils/rateLimit.js';
@@ -17,7 +17,9 @@ import {setupPageMetadataEndpoint} from "./endpoints/setupPageMetadataEndpoint.j
 import {setupHomepageRoute} from "./endpoints/setupHomepageRoute.js";
 import {setupPutHook} from "./data/setupPutHook.js";
 import {setupOnHook} from "./data/setupOnHook.js";
-import {getIndexNowKey, indexNowQueue, submitIndexNowUrls} from "./utils/sitemap/indexnow.js";
+import {setupIndexNowEndpoint} from "./endpoints/setupIndexNowEndPoint.js";
+import {setupIndexNowKeyEndpoint} from "./endpoints/setupIndexNowKeyEndpoint.js";
+import {setupGenerateMetadataEndpoint} from "./endpoints/setupMetadataEndpoint.js";
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
 
@@ -62,29 +64,11 @@ const gun: any = (Gun as any)({
     batch: false,
 });
 
-// Serve IndexNow key file
-app.get('/:key.txt', (req: Request, res: Response) => {
-    const key = getIndexNowKey();
-    if (req.params.key === key) {
-        res.set('Content-Type', 'text/plain');
-        res.send(key);
-    } else {
-        res.status(404).send('Key not found');
-    }
-});
-
-// Manual IndexNow submission endpoint (optional)
-app.post('/api/indexnow', limiter, async (_req: Request, res: Response) => {
-    try {
-        await submitIndexNowUrls();
-        res.status(200).json({ message: 'IndexNow submission triggered', queueSize: indexNowQueue.size });
-    } catch (error) {
-        console.error('[IndexNow] Manual submission failed:', error);
-        res.status(500).json({ error: 'Failed to submit URLs to IndexNow' });
-    }
-});
-
 bootstrapSiteMapIfNotExist(gun);
+
+setupGenerateMetadataEndpoint(app);
+setupIndexNowKeyEndpoint(app);
+setupIndexNowEndpoint(app);
 setupSitemapRoute(app);
 setupRebuildSitemapRoute(app, gun);
 setupOnHook(gun);
