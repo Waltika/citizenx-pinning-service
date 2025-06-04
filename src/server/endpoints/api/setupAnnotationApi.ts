@@ -69,8 +69,10 @@ export function setupAnnotationApi(app: Express, gun: any) {
                         screenshot: annotation.screenshot,
                         metadata: annotation.metadata || {},
                         isDeleted: annotation.isDeleted || false,
+                        title : annotation.title,
+                        anchorText : annotation.anchorText
                     });
-                    addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+                    addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
                 };
 
                 annotationNodes.forEach(node => {

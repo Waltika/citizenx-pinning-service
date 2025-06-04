@@ -32,6 +32,8 @@ export interface Annotation {
         twitterImage: string | null;
     };
     originalUrl?: string;
+    title: string;
+    anchorText : string;
 }
 
 export interface SitemapEntry {

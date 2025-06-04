@@ -16,7 +16,7 @@ try {
     console.error('Failed to read Short.io API key from', shortKeyPath, ':', error);
 }
 
-export function setupAnnotationDebugApiRoute(app : Express, gun : any) {
+export function setupAnnotationDebugApiRoute(app: Express, gun: any) {
     app.get('/api/debug/annotations', async (req: Request, res: Response) => {
         const {url, annotationId} = req.query;
         console.log(`[DEBUG] /api/debug/annotations called with url: ${url}, annotationId: ${annotationId}`);
@@ -50,6 +50,8 @@ export function setupAnnotationDebugApiRoute(app : Express, gun : any) {
                                     isDeleted: annotation.isDeleted || false,
                                     screenshot: annotation.screenshot,
                                     metadata: annotation.metadata || {},
+                                    title: annotation.title,
+                                    anchorText: annotation.anchorText
                                 };
 
                                 const comments: any[] = [];

@@ -52,7 +52,7 @@ function updateSitemap(): void {
     }
 }
 
-export async function addAnnotationToSitemap(annotationId: string, annotationUrl: string, timestamp: number, title?: string, anchorText?: string): Promise<void> {
+export async function addAnnotationToSitemap(annotationId: string, annotationUrl: string, timestamp: number, title: string, anchorText: string): Promise<void> {
     const base64Url = Buffer.from(annotationUrl).toString('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
