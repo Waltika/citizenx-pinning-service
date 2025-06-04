@@ -275,6 +275,7 @@ export function setupAnnotationRoute(app: Express, gun: any) {
         </a>
     </div>
     <div class="annotation-container">
+        <H1 class="title">${annotation.title || `Annotation by ${profile.handle}`}</H1>
         <div class="annotation-header">
             ${profile.profilePicture ? `<img src="${profile.profilePicture}" alt="${profile.handle || 'User'}" class="author-img">` : ''}
             <div>

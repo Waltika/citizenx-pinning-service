@@ -1,9 +1,9 @@
-import {addAnnotationToSitemap, sitemapUrls} from "./sitemap/addAnnotationsToSitemap.js";
-import {updateSitemap} from "./sitemap/updateSitemap.js";
-import fs from "fs";
-import {sitemapPath} from "../config/index.js";
+import { addAnnotationToSitemap, sitemapUrls } from './sitemap/addAnnotationsToSitemap.js';
+import { updateSitemap } from './sitemap/updateSitemap.js';
+import fs from 'fs';
+import { sitemapPath } from '../config/index.js';
 
-export async function bootstrapSitemap(gun : any): Promise<void> {
+export async function bootstrapSitemap(gun: any): Promise<void> {
     console.log('Bootstrapping sitemap with existing annotations...');
     try {
         const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
@@ -49,7 +49,6 @@ export async function bootstrapSitemap(gun : any): Promise<void> {
                         }
                         console.log(`Found URL node: ${url}`);
                         gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
-
                             if (annotation && typeof annotation === 'object' && !annotation.id) {
                                 console.log(`Adding ID to annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
                                 annotation.id = annotationId;
@@ -59,7 +58,7 @@ export async function bootstrapSitemap(gun : any): Promise<void> {
                                 console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
                                 return;
                             }
-                            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+                            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
                             totalAnnotations++;
                         });
                     });
@@ -77,8 +76,7 @@ export async function bootstrapSitemap(gun : any): Promise<void> {
     }
 }
 
-export function bootstrapSiteMapIfNotExist(gun : any) {
-// Bootstrap sitemap with existing annotations only if the sitemap file doesn't exist
+export function bootstrapSiteMapIfNotExist(gun: any) {
     if (!fs.existsSync(sitemapPath)) {
         console.log('No sitemap file found, running bootstrapSitemap...');
         bootstrapSitemap(gun).then(() => console.log('Bootstrap sitemap completed with', sitemapUrls.size, 'URLs')).catch(error => console.error('Error bootstrapping sitemap:', error));

@@ -71,7 +71,7 @@ export async function addAnnotationToSitemap(annotationId: string, annotationUrl
         console.log(`Added annotation to sitemap: ${sitemapUrl}, Timestamp: ${new Date(timestamp).toISOString()}, Title: ${title || 'none'}, AnchorText: ${anchorText || 'none'}`);
     } else if (existingEntry.timestamp !== timestamp || existingEntry.title !== title || existingEntry.anchorText !== anchorText) {
         sitemapUrls.delete(existingEntry);
-        sitemapUrls.add({url: sitemapUrl, timestamp : timestamp, title: title, anchorText : anchorText});
+        sitemapUrls.add({url: sitemapUrl, timestamp, title, anchorText});
         queueIndexNowUrls([sitemapUrl]);
         updateSitemap();
         console.log(`Updated annotation in sitemap: ${sitemapUrl}, New Timestamp: ${new Date(timestamp).toISOString()}, Title: ${title || 'none'}, AnchorText: ${anchorText || 'none'}`);
