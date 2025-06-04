@@ -10,7 +10,7 @@ import {stripHtml} from "../utils/stripHtml.js";
 import {publicUrl, websiteUrl} from "../config/index.js";
 import {appendUtmParams} from "../utils/appendUtmParams.js";
 
-export function setupAnnotationRoute(app : Express, gun : any) {
+export function setupAnnotationRoute(app: Express, gun: any) {
     app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
         console.log(`[DEBUG] /:annotationId/:base64Url called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
 
@@ -87,6 +87,16 @@ export function setupAnnotationRoute(app : Express, gun : any) {
                 .slice(0, 10)
                 .join(', ');
 
+            // Prepare share text (matches client logic)
+            const plainContent = annotationNoHTML;
+            const truncatedContent = plainContent.trim()
+                ? plainContent.length > 100
+                    ? plainContent.substring(0, 100) + '...'
+                    : plainContent
+                : 'No content available';
+            const shareText = `Check out this annotation: "${truncatedContent}" by ${profile.handle || 'Unknown'} #CitizenX`;
+            const longShareUrl = `${publicUrl}/viewannotation/${annotationId}/${base64Url}`;
+
             const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -123,6 +133,17 @@ export function setupAnnotationRoute(app : Express, gun : any) {
             padding: 20px;
             line-height: 1.6;
             background-color: #f5f5f5;
+        }
+        .header {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .back-arrow {
+            width: 32px;
+            height: 32px;
+            fill: #333;
         }
         .annotation-container {
             background: white;
@@ -161,23 +182,95 @@ export function setupAnnotationRoute(app : Express, gun : any) {
             margin-bottom: 20px;
             border: 1px solid #ddd;
         }
-        .view-link {
+        .button-container {
+            display: flex;
+            gap: 10px;
+        }
+        .view-link, .share-button {
             display: inline-flex;
             align-items: center;
-            padding: 10px 20px;
+            justify-content: center;
+            box-sizing: border-box;
+            height: 32px;
+            min-height: 32px;
+            padding: 4px 8px;
             background-color: #000000;
             color: white;
             text-decoration: none;
             border-radius: 6px;
+            border: none;
+            font-family: 'Roboto', Arial, sans-serif;
+            font-size: 0.875rem;
             font-weight: 500;
+            line-height: 1.75;
             transition: background-color 0.3s ease;
+            cursor: pointer;
         }
-        .view-link:hover {
+        .view-link:hover, .share-button:hover {
             background-color: #393b3c;
+        }
+        .share-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .share-icon {
+            width: 18px;
+            height: 18px;
+            margin-right: 4px;
+            fill: white;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 120px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            display: none;
+            z-index: 1000;
+            aria-live: polite;
+        }
+        #toast.success {
+            background-color: #19571b;
+        }
+        #toast.error {
+            background-color: #f44336;
         }
     </style>
 </head>
 <body>
+    <div class="header">
+        <a href="https://service.citizenx.app" title="Back to homepage" aria-label="Back to homepage">
+            <svg class="back-arrow" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+            </svg>
+        </a>
+    </div>
     <div class="annotation-container">
         <div class="annotation-header">
             ${profile.profilePicture ? `<img src="${profile.profilePicture}" alt="${profile.handle || 'User'}" class="author-img">` : ''}
@@ -188,8 +281,64 @@ export function setupAnnotationRoute(app : Express, gun : any) {
         </div>
         <div class="content">${annotation.content}</div>
         ${image !== defaultImage ? `<img src="${image}" alt="Annotation screenshot" class="screenshot">` : ''}
-        <a href="${viewUrl}" class="view-link">View Full Annotation on CitizenX</a>
+        <div class="button-container">
+            <a href="${viewUrl}" class="view-link">Get the Extension to Annotate on CitizenX</a>
+            <div class="tooltip">
+                <button id="share-button" class="share-button" title="Share this annotation" aria-label="Share annotation">
+                    <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+                    </svg>
+                    Share
+                </button>
+                <span class="tooltiptext">Share this annotation</span>
+            </div>
+        </div>
     </div>
+    <div id="toast"></div>
+    <script>
+        const shareButton = document.getElementById('share-button');
+        const toast = document.getElementById('toast');
+
+        function showToast(message, type) {
+            toast.textContent = message;
+            toast.className = type;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
+        shareButton.addEventListener('click', async () => {
+            shareButton.disabled = true;
+            shareButton.textContent = 'Shortening...';
+            try {
+                const longUrl = '${longShareUrl.replace(/'/g, "\\'")}';
+                let shareUrl = longUrl;
+                try {
+                    const response = await fetch('/api/shorten', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: longUrl })
+                    });
+                    if (!response.ok) throw new Error('Failed to shorten URL');
+                    const data = await response.json();
+                    shareUrl = data.shortUrl || longUrl;
+                } catch (err) {
+                    console.error('Failed to shorten URL:', err);
+                    showToast('Failed to shorten URL, using long URL', 'error');
+                }
+                const shareContent = '${shareText.replace(/'/g, "\\'")} ' + shareUrl;
+                await navigator.clipboard.writeText(shareContent);
+                showToast('Link copied to clipboard!', 'success');
+            } catch (err) {
+                console.error('Failed to copy share link:', err);
+                showToast('Failed to copy link', 'error');
+            } finally {
+                shareButton.disabled = false;
+                shareButton.innerHTML = '<svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg> Share';
+            }
+        });
+    </script>
 </body>
 </html>
 `;

@@ -15,7 +15,7 @@ import {setupAnnotationRoute} from "./endpoints/setupAnnoationRoute.js";
 import {setupImageRoute} from "./endpoints/setupImageRoute.js";
 import {setupAnnotationApi} from "./endpoints/api/setupAnnotationApi.js";
 import {setupPageMetadataEndpoint} from "./endpoints/setupPageMetadataEndpoint.js";
-import {setupHomepageRoute} from "./endpoints/home.js";
+import {setupHomepageRoute} from "./endpoints/setupHomepageRoute.js";
 import {setupPutHook} from "./data/setupPutHook.js";
 import {setupOnHook} from "./data/setupOnHook.js";
 

@@ -25,7 +25,7 @@ export function setupHomepageRoute(app: Express) {
             .join('');
 
         const ctaUrl = appendUtmParams('https://citizenx.app', req.query);
-        const logoUrl = appendUtmParams('https://citizenx.app', req.query);
+        const logoUrl = appendUtmParams('https://service.citizenx.app', req.query);
 
         const html = `
 <!DOCTYPE html>
