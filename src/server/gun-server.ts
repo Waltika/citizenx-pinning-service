@@ -1,7 +1,6 @@
-// arc/server/gun-server.ts
 import Gun from 'gun';
 import http from 'http';
-import express, {Express} from 'express';
+import express, {Request, Response, Express} from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import {limiter} from './utils/rateLimit.js';
@@ -18,6 +17,7 @@ import {setupPageMetadataEndpoint} from "./endpoints/setupPageMetadataEndpoint.j
 import {setupHomepageRoute} from "./endpoints/setupHomepageRoute.js";
 import {setupPutHook} from "./data/setupPutHook.js";
 import {setupOnHook} from "./data/setupOnHook.js";
+import {getIndexNowKey, indexNowQueue, submitIndexNowUrls} from "./utils/sitemap/indexnow.js";
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
 
@@ -54,7 +54,6 @@ try {
     console.warn('Data persistence may not work without a persistent disk.');
 }
 
-
 const gun: any = (Gun as any)({
     web: server,
     peers: initialPeers,
@@ -63,6 +62,27 @@ const gun: any = (Gun as any)({
     batch: false,
 });
 
+// Serve IndexNow key file
+app.get('/:key.txt', (req: Request, res: Response) => {
+    const key = getIndexNowKey();
+    if (req.params.key === key) {
+        res.set('Content-Type', 'text/plain');
+        res.send(key);
+    } else {
+        res.status(404).send('Key not found');
+    }
+});
+
+// Manual IndexNow submission endpoint (optional)
+app.post('/api/indexnow', limiter, async (_req: Request, res: Response) => {
+    try {
+        await submitIndexNowUrls();
+        res.status(200).json({ message: 'IndexNow submission triggered', queueSize: indexNowQueue.size });
+    } catch (error) {
+        console.error('[IndexNow] Manual submission failed:', error);
+        res.status(500).json({ error: 'Failed to submit URLs to IndexNow' });
+    }
+});
 
 bootstrapSiteMapIfNotExist(gun);
 setupSitemapRoute(app);
@@ -77,7 +97,7 @@ setupAnnotationRoute(app, gun);
 setupViewAnnotationRoute(app, gun);
 setupAnnotationDebugApiRoute(app, gun);
 
-app.get('/health', (_req, res) => res.status(200).json({status: 'ok'}));
+app.get('/health', (_req: any, res: Response) => res.status(200).json({status: 'ok'}));
 
 console.log(`Gun server running on port ${port}`);
 console.log(`Public URL: ${publicUrl}/gun`);
