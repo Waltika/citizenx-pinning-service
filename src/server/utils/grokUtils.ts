@@ -16,9 +16,9 @@ function simpleHash(str: string): string {
     return hash.toString();
 }
 
-export async function generateMetadata(content: string, url: string, author: string): Promise<{title: string, anchorText: string}> {
+export async function generateMetadata(content: string, url: string): Promise<{title: string, anchorText: string}> {
     const cleanContent = stripHtml(content).substring(0, 1000); // Limit content size
-    const cacheKey = simpleHash(cleanContent + url + author);
+    const cacheKey = simpleHash(cleanContent + url);
 
     // Check cache
     const cached = metadataCache.get(cacheKey);
@@ -42,7 +42,6 @@ Focus on education-related themes if present.
 
 Content: ${cleanContent}
 URL: ${url}
-Author: ${author}
 
 Return JSON:
 {
