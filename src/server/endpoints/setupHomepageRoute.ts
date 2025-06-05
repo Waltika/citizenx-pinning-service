@@ -213,7 +213,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
                     let annotationCount = 0;
                     for (const [url, urlData] of Object.entries(shardData)) {
                         if (url === '_' || !url || !urlData || typeof urlData !== 'object') {
-                            console.log(`[DEBUG] Skipping invalid URL data in shard: ${shard}, URL: ${url}`);
+                            console.log(`[DEBUG] Skipping invalid URL data in shard: ${shard}, URL: ${url}, urlData: ${urlData}`);
                             continue;
                         }
                         urlCount++;
