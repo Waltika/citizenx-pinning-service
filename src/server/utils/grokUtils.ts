@@ -14,8 +14,6 @@ function simpleHash(str: string): string {
 
 export async function generateMetadata(content: string, url: string): Promise<{title: string, anchorText: string}> {
     const cleanContent = stripHtml(content).substring(0, 1000); // Limit content size
-    const cacheKey = simpleHash(cleanContent + url);
-
     try {
         const response = await axios.post(
             'https://api.x.ai/v1/chat/completions',
@@ -54,7 +52,7 @@ Return JSON:
             title: result.title || `Annotation on ${new URL(url).hostname}`,
             anchorText: result.anchorText || 'View Annotation'
         };
-        console.log(`[Grok API] Generated metadata for key: ${cacheKey}`, metadata);
+        console.log(`[Grok API] Generated metadata for content: ${cleanContent}`, metadata);
         return metadata;
     } catch (error) {
         console.error('[Grok API] Failed to generate metadata:', error);
