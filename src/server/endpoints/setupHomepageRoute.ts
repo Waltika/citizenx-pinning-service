@@ -5,7 +5,7 @@ import { publicUrl } from "../config/index.js";
 import { getShardKey } from "../utils/shardUtils.js";
 import { fromUrlSafeBase64 } from "../utils/fromUrlSafeBase64.js";
 import { sitemapUrls } from "../utils/sitemap/addAnnotationsToSitemap.js";
-import {Annotation} from "../types/types.js";
+import { Annotation } from "../types/types.js";
 
 // Cache for recent annotations and profiles
 const recentAnnotationsCache: Array<{
@@ -19,7 +19,7 @@ const recentAnnotationsCache: Array<{
     screenshot?: string;
 }> = [];
 const profileCache = new Map<string, { handle: string }>();
-const MAX_CACHED_ANNOTATIONS = 20;
+const MAX_CACHED_ANNOTATIONS = 30;
 
 // Track subscribed domains and shards
 const subscribedDomains = new Set<string>();
@@ -71,7 +71,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
             if (!shardData || typeof shardData !== 'object') return;
 
             // Iterate over URLs in the shard
-            Object.entries(shardData).forEach(([url, urlData]: [string, any]) => {
+            Object.entries(shardData as Record<string, Record<string, Annotation>>).forEach(([url, urlData]) => {
                 if (url === '_' || !url || !urlData || typeof urlData !== 'object') return;
 
                 // Determine the correct shard for this URL
@@ -80,13 +80,13 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                 if (targetShard !== shard) return; // Skip if this URL belongs to a different shard
 
                 // Iterate over annotations for this URL
-                Object.entries(urlData).forEach(async ([annotationId, annotation]: [string, any]) => {
+                Object.entries(urlData).forEach(async ([annotationId, annotation]) => {
                     if (annotationId === '_' || !annotation || typeof annotation !== 'object') return;
-                    if (!annotation.id || !annotation.url || !annotation.timestamp) return;
+                    if (annotation.isDeleted || !annotation.id || !annotation.url || !annotation.timestamp) return;
 
-                    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
                     // Check if annotation is deleted
                     if (annotation.isDeleted) {
+                        const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
                         if (existingIndex >= 0) {
                             recentAnnotationsCache.splice(existingIndex, 1);
                             console.log(`[DEBUG] Removed deleted annotation ${annotationId} from cache, cache size: ${recentAnnotationsCache.length}`);
@@ -94,6 +94,8 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                         return;
                     }
 
+                    // Skip if annotation already exists in cache (immutable)
+                    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
                     if (existingIndex !== -1) return;
 
                     const base64Url = Buffer.from(annotation.url).toString('base64')
@@ -101,7 +103,6 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                         .replace(/\//g, '_')
                         .replace(/=/g, '');
 
-                    console.log(`[DEBUG] New annotation ${annotationId} detected, cache size: ${recentAnnotationsCache.length}`);
                     // Fetch or use cached profile (avoid async in listener)
                     let profile = profileCache.get(annotation.author);
                     if (!profile) {
@@ -176,6 +177,13 @@ export function subscribeToNewDomain(gun: any, url: string) {
 
 export function setupHomepageRoute(app: Express, gun: any) {
     // Initialize cache on server start
+// Simplified type for GUN metadata (the "_" key)
+    interface GUNMetadata {
+        '#'?: string;
+        '>'?: Record<string, number>;
+        [key: string]: any;
+    }
+
     const initializeCache = async (domains: string[]) => {
         console.log('[DEBUG] Initializing homepage cache with domains:', domains);
         try {
@@ -194,19 +202,72 @@ export function setupHomepageRoute(app: Express, gun: any) {
                 for (const shard of shards) {
                     console.log(`[DEBUG] Starting fetch for shard: ${shard}`);
                     let shardProcessed = false;
-                    const shardData = await new Promise<any>((resolve) => {
-                        gun.get(shard).once((data: any) => {
-                            resolve(data || {});
+                    const shardData: Record<string, Record<string, Annotation>> = {};
+
+                    // Use on listener to collect data over time
+                    await new Promise<void>((resolve) => {
+                        let lastUpdate = Date.now();
+                        const dataTimeout = 30000; // Total timeout of 30 seconds
+                        const idleTimeout = 5000; // Consider data complete if no updates for 5 seconds
+
+                        const checkComplete = () => {
+                            const now = Date.now();
+                            if (now - lastUpdate >= idleTimeout) {
+                                console.log(`[DEBUG] No new data for ${idleTimeout}ms, considering shard ${shard} complete`);
+                                offListener();
+                                shardProcessed = true;
+                                resolve();
+                            } else if (now - startTime >= dataTimeout) {
+                                console.warn(`[DEBUG] Timeout after ${dataTimeout}ms fetching shard: ${shard}`);
+                                offListener();
+                                shardProcessed = true;
+                                resolve();
+                            }
+                        };
+
+                        const startTime = Date.now();
+                        const onListener = gun.get(shard).on((data: Record<string, Record<string, Annotation> | GUNMetadata>) => {
+                            if (!data || typeof data !== 'object') return;
+
+                            // Merge new data into shardData
+                            Object.entries(data).forEach(([key, value]) => {
+                                if (key !== '_') {
+                                    if (value && typeof value === 'object') {
+                                        shardData[key] = value as Record<string, Annotation>;
+                                    } else {
+                                        console.warn(`[DEBUG] Unexpected value type for key ${key} in shard ${shard}:`, value);
+                                    }
+                                }
+                            });
+
+                            lastUpdate = Date.now();
+                            console.log(`[DEBUG] Received data update for shard ${shard}, current URL count: ${Object.keys(shardData).length}`);
                         });
+
+                        // Function to turn off the listener
+                        const offListener = () => {
+                            gun.get(shard).off(); // Remove the on listener
+                        };
+
+                        // Start checking for completion
+                        const interval = setInterval(() => {
+                            checkComplete();
+                            if (shardProcessed) clearInterval(interval);
+                        }, 1000);
+
+                        // Ensure we resolve even if no data arrives
                         setTimeout(() => {
                             if (!shardProcessed) {
-                                console.warn(`[DEBUG] Timeout after 30 seconds fetching shard: ${shard}`);
-                                resolve({});
+                                console.warn(`[DEBUG] Hard timeout after ${dataTimeout}ms with no data for shard: ${shard}`);
+                                offListener();
+                                clearInterval(interval);
+                                shardProcessed = true;
+                                resolve();
                             }
-                        }, 30000); // Increased timeout to 30 seconds
+                        }, dataTimeout);
                     });
-                    shardProcessed = true;
-                    console.log(`[DEBUG] Fetched shard data for ${shard}, data size: ${Object.keys(shardData).length}`);
+
+                    console.log(`[DEBUG] Fetched shard data for ${shard}, total URLs: ${Object.keys(shardData).length}`);
 
                     // Process URLs in the shard
                     let urlCount = 0;
@@ -220,7 +281,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
                         console.log(`[DEBUG] Found URL in shard: ${shard}, URL: ${url}`);
 
                         // Process annotations for this URL
-                        for (const [annotationId, annotation] of Object.entries(urlData as Annotation)) {
+                        for (const [annotationId, annotation] of Object.entries(urlData)) {
                             if (annotationId === '_' || !annotation || typeof annotation !== 'object') {
                                 console.log(`[DEBUG] Skipping invalid annotation in shard: ${shard}, URL: ${url}, ID: ${annotationId}`);
                                 continue;
