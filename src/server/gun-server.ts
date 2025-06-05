@@ -71,7 +71,6 @@ setupIndexNowKeyEndpoint(app);
 setupIndexNowEndpoint(app);
 setupSitemapRoute(app);
 setupRebuildSitemapRoute(app, gun);
-setupOnHook(gun);
 setupPutHook(gun);
 setupHomepageRoute(app, gun);
 setupAnnotationApi(app, gun);
