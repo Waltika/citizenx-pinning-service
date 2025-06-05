@@ -198,6 +198,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
                                 console.log(`[DEBUG] No valid URL data in shard: ${shard}, URL: ${url}`);
                                 return;
                             }
+                            console.log(`[DEBUG] Found URL in shard: ${shard}, URL: ${url}`);
                             gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
                                 if (annotation && !annotation.isDeleted && annotation.id && annotation.url && annotation.timestamp) {
                                     console.log(`[DEBUG] Found annotation in shard: ${shard}, URL: ${url}, ID: ${annotationId} and adding it to annotationsMap`);
@@ -205,7 +206,6 @@ export function setupHomepageRoute(app: Express, gun: any) {
                                 }
                             });
                         });
-                        setTimeout(resolve, 20000); // Timeout to prevent infinite wait
                     });
                 }
             }
