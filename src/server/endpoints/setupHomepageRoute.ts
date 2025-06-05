@@ -58,6 +58,77 @@ function getDomainsFromSitemap(): string[] {
     return Array.from(domains);
 }
 
+export function cacheNewAnnotation(annotation: Annotation, gun : any, shard : string) {
+    // Check if annotation is deleted
+    const annotationId = annotation.id;
+    if (annotation.isDeleted) {
+        const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+        if (existingIndex >= 0) {
+            recentAnnotationsCache.splice(existingIndex, 1);
+            console.log(`[DEBUG] Removed deleted annotation ${annotationId} from cache, cache size: ${recentAnnotationsCache.length}`);
+        }
+        return;
+    }
+
+    // Skip if annotation already exists in cache (immutable)
+    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+    if (existingIndex !== -1) return;
+
+    const base64Url = Buffer.from(annotation.url).toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
+    // Fetch or use cached profile (avoid async in listener)
+    let profile = profileCache.get(annotation.author);
+    if (!profile) {
+        // Defer profile fetching to break the call stack
+        setImmediate(async () => {
+            try {
+                profile = await getProfileWithRetries(gun, annotation.author);
+                profileCache.set(annotation.author, {handle: profile.handle || 'Anonymous'});
+
+                // Add annotation to cache if still not present
+                const recheckIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+                if (recheckIndex !== -1) return;
+
+                const newEntry = {
+                    id: annotation.id,
+                    relativeUrl: `/${annotation.id}/${base64Url}`,
+                    title: annotation.title || 'Untitled Annotation',
+                    anchorText: annotation.anchorText || 'View Annotation',
+                    author: annotation.author,
+                    handle: profile.handle || 'Anonymous',
+                    timestamp: annotation.timestamp,
+                    screenshot: `/image/${annotation.id}/${base64Url}/image.png`
+                };
+                recentAnnotationsCache.push(newEntry);
+                recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
+                recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
+                console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+            } catch (error) {
+                console.error(`[DEBUG] Error fetching profile for ${annotation.author}:`, error);
+            }
+        });
+    } else {
+        // Add annotation to cache synchronously if profile is cached
+        const newEntry = {
+            id: annotation.id,
+            relativeUrl: `/${annotation.id}/${base64Url}`,
+            title: annotation.title || 'Untitled Annotation',
+            anchorText: annotation.anchorText || 'View Annotation',
+            author: annotation.author,
+            handle: profile.handle || 'Anonymous',
+            timestamp: annotation.timestamp,
+            screenshot: `/image/${annotation.id}/${base64Url}/image.png`
+        };
+        recentAnnotationsCache.push(newEntry);
+        recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
+        recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
+        console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+    }
+}
+
 // Set up real-time updates for a specific domain
 function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
     const highTrafficDomains = ['google_com', 'facebook_com', 'twitter_com'];
@@ -90,74 +161,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                 Object.entries(urlData as Record<string, Annotation>).forEach(async ([annotationId, annotation]) => {
                     if (annotationId === '_' || !annotation || typeof annotation !== 'object') return;
                     if (annotation.isDeleted || !annotation.id || !annotation.url || !annotation.timestamp) return;
-
-                    // Check if annotation is deleted
-                    if (annotation.isDeleted) {
-                        const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-                        if (existingIndex >= 0) {
-                            recentAnnotationsCache.splice(existingIndex, 1);
-                            console.log(`[DEBUG] Removed deleted annotation ${annotationId} from cache, cache size: ${recentAnnotationsCache.length}`);
-                        }
-                        return;
-                    }
-
-                    // Skip if annotation already exists in cache (immutable)
-                    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-                    if (existingIndex !== -1) return;
-
-                    const base64Url = Buffer.from(annotation.url).toString('base64')
-                        .replace(/\+/g, '-')
-                        .replace(/\//g, '_')
-                        .replace(/=/g, '');
-
-                    // Fetch or use cached profile (avoid async in listener)
-                    let profile = profileCache.get(annotation.author);
-                    if (!profile) {
-                        // Defer profile fetching to break the call stack
-                        setImmediate(async () => {
-                            try {
-                                profile = await getProfileWithRetries(gun, annotation.author);
-                                profileCache.set(annotation.author, { handle: profile.handle || 'Anonymous' });
-
-                                // Add annotation to cache if still not present
-                                const recheckIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-                                if (recheckIndex !== -1) return;
-
-                                const newEntry = {
-                                    id: annotation.id,
-                                    relativeUrl: `/${annotation.id}/${base64Url}`,
-                                    title: annotation.title || 'Untitled Annotation',
-                                    anchorText: annotation.anchorText || 'View Annotation',
-                                    author: annotation.author,
-                                    handle: profile.handle || 'Anonymous',
-                                    timestamp: annotation.timestamp,
-                                    screenshot: `/image/${annotation.id}/${base64Url}/image.png`
-                                };
-                                recentAnnotationsCache.push(newEntry);
-                                recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
-                                recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
-                                console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
-                            } catch (error) {
-                                console.error(`[DEBUG] Error fetching profile for ${annotation.author}:`, error);
-                            }
-                        });
-                    } else {
-                        // Add annotation to cache synchronously if profile is cached
-                        const newEntry = {
-                            id: annotation.id,
-                            relativeUrl: `/${annotation.id}/${base64Url}`,
-                            title: annotation.title || 'Untitled Annotation',
-                            anchorText: annotation.anchorText || 'View Annotation',
-                            author: annotation.author,
-                            handle: profile.handle || 'Anonymous',
-                            timestamp: annotation.timestamp,
-                            screenshot: `/image/${annotation.id}/${base64Url}/image.png`
-                        };
-                        recentAnnotationsCache.push(newEntry);
-                        recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
-                        recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
-                        console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
-                    }
+                    cacheNewAnnotation(annotation, gun, shard);
                 });
             });
         });
@@ -246,10 +250,10 @@ export function setupHomepageRoute(app: Express, gun: any) {
                         await new Promise<void>((resolve) => {
                             let urlProcessed = false;
                             const urlTimeout = setTimeout(() => {
-                                console.warn(`[DEBUG] Timeout after 10 seconds fetching annotations for URL: ${url} in shard: ${shard}`);
+                                console.warn(`[DEBUG] Timeout after 20 seconds fetching annotations for URL: ${url} in shard: ${shard}`);
                                 urlProcessed = true;
                                 resolve();
-                            }, 10000);
+                            }, 20000);
 
                             gun.get(shard).get(url).map().once((annotation: Annotation, annotationId: string) => {
                                 if (urlProcessed) return;

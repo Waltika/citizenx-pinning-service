@@ -5,7 +5,7 @@ import {getShardKey} from "../utils/shardUtils.js";
 import {Annotation} from "../types/types.js";
 import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.js";
 import sharp from "sharp";
-import {subscribeToNewDomain} from "./setupHomepageRoute.js";
+import {cacheNewAnnotation, subscribeToNewDomain} from "./setupHomepageRoute.js";
 
 export function setupImageRoute(app: Express, gun: any) {
 // Update /image/... to add to sitemap
@@ -63,6 +63,7 @@ export function setupImageRoute(app: Express, gun: any) {
             }
 
             addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+            cacheNewAnnotation(annotation, gun, subShard || domainShard);
             subscribeToNewDomain(gun, annotation.url);
 
             console.log(`[DEBUG] Annotation screenshot found, length: ${annotation.screenshot.length}`);

@@ -4,7 +4,7 @@ import {fetchPageMetadata} from "../utils/fetchPageMetadata.js";
 import {normalizeUrl} from "../utils/normalizeUrl.js";
 import {getShardKey} from "../utils/shardUtils.js";
 import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.js";
-import {subscribeToNewDomain} from "./setupHomepageRoute.js";
+import {cacheNewAnnotation, subscribeToNewDomain} from "./setupHomepageRoute.js";
 
 export function setupPageMetadataEndpoint(app: Express, gun: any) {
 // Update /api/page-metadata to add to sitemap
@@ -29,6 +29,10 @@ export function setupPageMetadataEndpoint(app: Express, gun: any) {
                         node.map().once((annotation: any) => {
                             if (annotation && !annotation.isDeleted && annotation.id && annotation.url && annotation.timestamp) {
                                 addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+                                cacheNewAnnotation(annotation, gun, subShard || domainShard);
+                                console.log(
+                                    `[DEBUG] Cached annotation for url: ${annotation.url}, id: ${annotation.id}, timestamp: ${annotation.timestamp}`
+                                )
                                 subscribeToNewDomain(gun, annotation.url);
                             }
                         });
