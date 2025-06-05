@@ -52,7 +52,7 @@ function updateSitemap(): void {
     }
 }
 
-export async function addAnnotationToSitemap(annotationId: string, annotationUrl: string, timestamp: number, title: string, anchorText: string): Promise<void> {
+export async function addAnnotationToSitemap(annotationId: string, annotationUrl: string, timestamp: number): Promise<void> {
     const base64Url = Buffer.from(annotationUrl).toString('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
@@ -65,15 +65,15 @@ export async function addAnnotationToSitemap(annotationId: string, annotationUrl
 
     const existingEntry = Array.from(sitemapUrls).find(entry => entry.url === sitemapUrl);
     if (!existingEntry) {
-        sitemapUrls.add({url: sitemapUrl, timestamp, title, anchorText});
+        sitemapUrls.add({url: sitemapUrl, timestamp});
         queueIndexNowUrls([sitemapUrl]);
         updateSitemap();
-        console.log(`Added annotation to sitemap: ${sitemapUrl}, Timestamp: ${new Date(timestamp).toISOString()}, Title: ${title || 'none'}, AnchorText: ${anchorText || 'none'}`);
-    } else if (existingEntry.timestamp !== timestamp || existingEntry.title !== title || existingEntry.anchorText !== anchorText) {
+        console.log(`Added annotation to sitemap: ${sitemapUrl}, Timestamp: ${new Date(timestamp).toISOString()}`);
+    } else if (existingEntry.timestamp !== timestamp ) {
         sitemapUrls.delete(existingEntry);
-        sitemapUrls.add({url: sitemapUrl, timestamp, title, anchorText});
+        sitemapUrls.add({url: sitemapUrl, timestamp});
         queueIndexNowUrls([sitemapUrl]);
         updateSitemap();
-        console.log(`Updated annotation in sitemap: ${sitemapUrl}, New Timestamp: ${new Date(timestamp).toISOString()}, Title: ${title || 'none'}, AnchorText: ${anchorText || 'none'}`);
+        console.log(`Updated annotation in sitemap: ${sitemapUrl}, New Timestamp: ${new Date(timestamp).toISOString()}`);
     }
 }

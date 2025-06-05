@@ -1,24 +1,176 @@
-import {Express, Request, Response} from "express";
-import {sitemapUrls} from "../utils/sitemap/addAnnotationsToSitemap.js";
-import {appendUtmParams} from "../utils/appendUtmParams.js";
+import { Express, Request, Response } from "express";
+import { appendUtmParams } from "../utils/appendUtmParams.js";
+import { getProfileWithRetries } from "../data/getProfileWithRetries.js";
+import { publicUrl } from "../config/index.js";
 
-export function setupHomepageRoute(app: Express) {
-    app.get('/', (req: Request, res: Response) => {
-        const recentAnnotations = Array.from(sitemapUrls)
-            .sort((a, b) => b.timestamp - a.timestamp)
-            .map(entry => {
-                console.log(`Listing annotation: ${entry.url}`);
-                const viewUrl = appendUtmParams(entry.url, req.query);
-                const anchorText = entry.anchorText || `Annotation from ${new Date(entry.timestamp).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
-                })}`;
-                return `<li><a href="${viewUrl}" class="annotation-link">${anchorText}</a></li>`;
-            })
-            .filter(Boolean)
+// Cache for recent annotations and profiles
+const recentAnnotationsCache: Array<{
+    id: string;
+    relativeUrl: string;
+    title: string;
+    anchorText: string;
+    author: string;
+    handle: string;
+    timestamp: number;
+    screenshot?: string;
+}> = [];
+const profileCache = new Map<string, { handle: string }>();
+const MAX_CACHED_ANNOTATIONS = 30;
+
+export function setupHomepageRoute(app: Express, gun: any) {
+    // Initialize cache on server start
+    const initializeCache = async () => {
+        console.log('[DEBUG] Initializing homepage cache');
+        try {
+            const domains = ['x_com']; // Add more domains as needed
+            const annotationsMap = new Map<string, any>();
+
+            for (const domain of domains) {
+                const domainShard = `annotations_${domain}`;
+                console.log(`[DEBUG] Scanning domain shard for cache init: ${domainShard}`);
+                await new Promise<void>((resolve) => {
+                    gun.get(domainShard).map().once((urlData: any, url: string) => {
+                        if (!url || url === '_' || !urlData || typeof urlData !== 'object') {
+                            console.log(`[DEBUG] No valid URL data in shard: ${domainShard}, URL: ${url}`);
+                            return;
+                        }
+                        gun.get(domainShard).get(url).map().once((annotation: any, annotationId: string) => {
+                            if (annotation && !annotation.isDeleted && annotation.id && annotation.url && annotation.timestamp) {
+                                annotationsMap.set(annotationId, { ...annotation, domainShard });
+                            }
+                        });
+                    });
+                    setTimeout(resolve, 5000); // Timeout to prevent infinite wait
+                });
+            }
+
+            // Sort and limit to top 30 by timestamp
+            const sortedAnnotations = Array.from(annotationsMap.values())
+                .sort((a, b) => b.timestamp - a.timestamp)
+                .slice(0, MAX_CACHED_ANNOTATIONS);
+
+            // Populate cache
+            for (const annotation of sortedAnnotations) {
+                const base64Url = Buffer.from(annotation.url).toString('base64')
+                    .replace(/\+/g, '-')
+                    .replace(/\//g, '_')
+                    .replace(/=/g, '');
+                const profile = await getProfileWithRetries(gun, annotation.author);
+                const handle = profile.handle || 'Anonymous';
+
+                // Cache profile
+                if (!profileCache.has(annotation.author)) {
+                    profileCache.set(annotation.author, { handle });
+                }
+
+                recentAnnotationsCache.push({
+                    id: annotation.id,
+                    relativeUrl: `/${annotation.id}/${base64Url}`, // Relative path
+                    title: annotation.title || 'Untitled Annotation',
+                    anchorText: annotation.anchorText || 'View Annotation',
+                    author: annotation.author,
+                    handle,
+                    timestamp: annotation.timestamp,
+                    screenshot: annotation.screenshot ? `/image/${annotation.id}/${base64Url}/image.png` : undefined
+                });
+            }
+
+            // Sort cache by timestamp
+            recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
+            recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS); // Keep only 30
+            console.log(`[DEBUG] Initialized homepage cache with ${recentAnnotationsCache.length} annotations`);
+        } catch (error) {
+            console.error('[DEBUG] Error initializing homepage cache:', error);
+        }
+    };
+
+    // Set up real-time updates
+    const setupRealtimeUpdates = () => {
+        console.log('[DEBUG] Setting up real-time updates for homepage cache');
+        const domains = ['x_com']; // Add more domains as needed
+
+        for (const domain of domains) {
+            const domainShard = `annotations_${domain}`;
+            gun.get(domainShard).map().on((urlData: any, url: string) => {
+                if (!url || url === '_' || !urlData || typeof urlData !== 'object') return;
+                gun.get(domainShard).get(url).map().on(async (annotation: any, annotationId: string) => {
+                    if (!annotation || annotation.isDeleted || !annotation.id || !annotation.url || !annotation.timestamp) return;
+
+                    const base64Url = Buffer.from(annotation.url).toString('base64')
+                        .replace(/\+/g, '-')
+                        .replace(/\//g, '_')
+                        .replace(/=/g, '');
+
+                    // Fetch or use cached profile
+                    let profile = profileCache.get(annotation.author);
+                    if (!profile) {
+                        profile = await getProfileWithRetries(gun, annotation.author);
+                        profileCache.set(annotation.author, { handle: profile.handle || 'Anonymous' });
+                    }
+
+                    // Update or add annotation to cache
+                    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+                    const newEntry = {
+                        id: annotation.id,
+                        relativeUrl: `/${annotation.id}/${base64Url}`,
+                        title: annotation.title || 'Untitled Annotation',
+                        anchorText: annotation.anchorText || 'View Annotation',
+                        author: annotation.author,
+                        handle: profile.handle || 'Anonymous',
+                        timestamp: annotation.timestamp,
+                        screenshot: annotation.screenshot ? `/image/${annotation.id}/${base64Url}/image.png` : undefined
+                    };
+
+                    if (existingIndex >= 0) {
+                        recentAnnotationsCache[existingIndex] = newEntry;
+                    } else {
+                        recentAnnotationsCache.push(newEntry);
+                        recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
+                        recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
+                    }
+                    console.log(`[DEBUG] Updated cache for annotation ${annotationId}, cache size: ${recentAnnotationsCache.length}`);
+                });
+            });
+        }
+    };
+
+    // Initialize cache and real-time updates
+    initializeCache().then(setupRealtimeUpdates);
+
+    app.get('/', async (req: Request, res: Response) => {
+        console.log('[DEBUG] Serving homepage');
+
+        // Serve from cache
+        const recentAnnotations = recentAnnotationsCache.slice(); // Copy to avoid modifying cache
+
+        // Generate annotation cards
+        const recentAnnotationsHtml = recentAnnotations
+            .map(annotation => `
+                <article class="annotation-card">
+                    <div class="annotation-header">
+                        ${annotation.screenshot ? `
+                            <a href="${annotation.relativeUrl}">
+                                <img src="${annotation.screenshot}" alt="Annotation screenshot by ${annotation.handle}" class="thumbnail" loading="lazy">
+                            </a>
+                        ` : ''}
+                        <div class="annotation-content">
+                            <h3 class="annotation-title">
+                                <a href="${annotation.relativeUrl}" class="annotation-link">${annotation.anchorText}</a>
+                            </h3>
+                            <p class="annotation-meta">
+                                By <span class="annotation-author">${annotation.handle}</span> on 
+                                ${new Date(annotation.timestamp).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+            })}
+                            </p>
+                        </div>
+                    </div>
+                </article>
+            `)
             .join('');
 
         const ctaUrl = appendUtmParams('https://citizenx.app', req.query);
-        const logoUrl = appendUtmParams('https://service.citizenx.app', req.query);
+        const logoUrl = '/'; // Relative path to homepage
 
         const html = `
 <!DOCTYPE html>
@@ -26,19 +178,21 @@ export function setupHomepageRoute(app: Express) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CitizenX Annotations - Service</title>
-    <meta name="description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation and annotate the web.">
-    <link rel="canonical" href="https://service.citizenx.app">
+    <meta name="description" content="Discover recent web annotations created with CitizenX. Join the conversation and annotate the web at citizenx.app.">
+    <meta name="keywords" content="web annotations, CitizenX, collaborative commentary, social media annotations">
+    <meta name="robots" content="index, follow">
+    <title>CitizenX Annotations - Collaborative Web Commentary</title>
+    <link rel="canonical" href="${publicUrl}/">
     <link rel="icon" type="image/png" href="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png">
-    <meta property="og:title" content="CitizenX Annotations - Service">
-    <meta property="og:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
-    <meta property="og:image" content="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png">
-    <meta property="og:url" content="https://service.citizenx.app">
+    <meta property="og:title" content="CitizenX Annotations - Collaborative Web Commentary">
+    <meta property="og:description" content="Discover recent web annotations created with CitizenX. Join the conversation and annotate the web at citizenx.app.">
+    <meta property="og:image" content="${recentAnnotations[0]?.screenshot || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png'}">
+    <meta property="og:url" content="${publicUrl}/">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="CitizenX Annotations - Service">
-    <meta name="twitter:description" content="Explore web annotations created with CitizenX. Visit citizenx.app to join the conversation.">
-    <meta name="twitter:image" content="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png">
+    <meta name="twitter:title" content="CitizenX Annotations - Collaborative Web Commentary">
+    <meta name="twitter:description" content="Discover recent web annotations created with CitizenX. Join the conversation and annotate the web at citizenx.app.">
+    <meta name="twitter:image" content="${recentAnnotations[0]?.screenshot || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png'}">
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-YDDS5BJ90C"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
@@ -81,10 +235,22 @@ export function setupHomepageRoute(app: Express) {
         h1 {
             color: #333;
             font-size: 1.8rem;
+            margin-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+        }
+        h3.annotation-title {
+            color: #333;
+            font-size: 1.2rem;
+            margin: 0 0 5px;
         }
         p {
             color: #444;
             font-size: 1rem;
+            margin-bottom: 10px;
         }
         .cta {
             display: inline-block;
@@ -103,29 +269,47 @@ export function setupHomepageRoute(app: Express) {
             text-align: left;
             margin-top: 20px;
         }
-        .annotations h2 {
-            color: #333;
-            font-size: 1.4rem;
-            margin-bottom: 10px;
+        .annotation-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: background-color 0.3s ease;
         }
-        .annotations ul {
-            list-style: none;
-            padding: 0;
+        .annotation-card:hover {
+            background-color: #f9f9f9;
         }
-        .annotations li {
-            margin-bottom: 8px;
+        .annotation-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .thumbnail {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .annotation-content {
+            flex: 1;
         }
         .annotation-link {
-            color: #7593f4;
+            color: #333;
             text-decoration: none;
-            display: inline-block;
-            max-width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            font-weight: 500;
         }
         .annotation-link:hover {
+            color: #7593f4;
             text-decoration: underline;
+        }
+        .annotation-meta {
+            color: #666;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .annotation-author {
+            font-weight: bold;
         }
         @media (max-width: 600px) {
             body {
@@ -137,15 +321,26 @@ export function setupHomepageRoute(app: Express) {
             h1 {
                 font-size: 1.5rem;
             }
-            .annotations h2 {
+            h2 {
                 font-size: 1.2rem;
             }
-            p, .annotation-link {
+            h3.annotation-title {
+                font-size: 1rem;
+            }
+            p {
                 font-size: 0.9rem;
             }
             .cta {
                 padding: 8px 16px;
                 font-size: 0.9rem;
+            }
+            .annotation-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            .thumbnail {
+                margin-bottom: 10px;
             }
         }
         @media (min-width: 601px) {
@@ -157,24 +352,26 @@ export function setupHomepageRoute(app: Express) {
 </head>
 <body>
     <div class="container">
-        <div class="header">
+        <header class="header">
             <a href="${logoUrl}">
                 <img src="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png" alt="CitizenX Logo" class="logo">
             </a>
-        </div>
-        <h1>CitizenX Annotations</h1>
-        <p>This service hosts web annotations created with CitizenX, a platform for collaborative web commentary.</p>
-        <p><a href="${ctaUrl}" class="cta">Visit CitizenX to Start Annotating</a></p>
-        <p>Explore existing annotations via our <a href="/sitemap.xml">sitemap</a>.</p>
-        ${recentAnnotations ? `
-        <div class="annotations">
-            <h2>Recent Annotations</h2>
-            <ul>${recentAnnotations}</ul>
-        </div>` : ''}
+        </header>
+        <main>
+            <h1>CitizenX Annotations</h1>
+            <p>This service hosts web annotations created with CitizenX, a platform for collaborative web commentary.</p>
+            <p><a href="${ctaUrl}" class="cta">Visit CitizenX to Start Annotating</a></p>
+            <p>Explore existing annotations via our <a href="/sitemap.xml">sitemap</a>.</p>
+            ${recentAnnotations.length ? `
+            <section class="annotations">
+                <h2>Recent Annotations</h2>
+                ${recentAnnotationsHtml}
+            </section>` : ''}
+        </main>
     </div>
 </body>
 </html>
-    `;
+        `;
         res.set('Content-Type', 'text/html');
         res.send(html);
     });

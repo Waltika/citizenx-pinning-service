@@ -61,7 +61,7 @@ export function setupImageRoute(app: Express, gun: any) {
                 return res.status(404).send('Annotation or screenshot not found');
             }
 
-            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
+            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
 
             console.log(`[DEBUG] Annotation screenshot found, length: ${annotation.screenshot.length}`);
             const base64Match = annotation.screenshot.match(/^data:image\/(png|jpeg);base64,(.+)$/);

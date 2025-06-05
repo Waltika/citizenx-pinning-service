@@ -27,7 +27,7 @@ export function setupPageMetadataEndpoint(app: Express, gun: any) {
                     new Promise<void>((resolve) => {
                         node.map().once((annotation: any) => {
                             if (annotation && !annotation.isDeleted && annotation.id && annotation.url && annotation.timestamp) {
-                                addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
+                                addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
                             }
                         });
                         setTimeout(resolve, 1000);

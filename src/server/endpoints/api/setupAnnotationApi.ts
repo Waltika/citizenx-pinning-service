@@ -72,7 +72,7 @@ export function setupAnnotationApi(app: Express, gun: any) {
                         title : annotation.title,
                         anchorText : annotation.anchorText
                     });
-                    addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
+                    addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
                 };
 
                 annotationNodes.forEach(node => {

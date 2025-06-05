@@ -73,7 +73,7 @@ setupSitemapRoute(app);
 setupRebuildSitemapRoute(app, gun);
 setupOnHook(gun);
 setupPutHook(gun);
-setupHomepageRoute(app);
+setupHomepageRoute(app, gun);
 setupAnnotationApi(app, gun);
 setupPageMetadataEndpoint(app, gun);
 setupImageRoute(app, gun);

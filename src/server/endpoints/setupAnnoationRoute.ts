@@ -63,7 +63,7 @@ export function setupAnnotationRoute(app: Express, gun: any) {
                 return res.status(404).send('Annotation not found');
             }
 
-            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
+            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
 
             console.log(`[DEBUG] Annotation found:`, annotationId);
             const profile = await getProfileWithRetries(gun, annotation.author);

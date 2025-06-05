@@ -58,7 +58,7 @@ export async function bootstrapSitemap(gun: any): Promise<void> {
                                 console.log(`Skipped invalid annotation in ${shard}, ID: ${annotationId}, data:`, annotation);
                                 return;
                             }
-                            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp, annotation.title, annotation.anchorText);
+                            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
                             totalAnnotations++;
                         });
                     });

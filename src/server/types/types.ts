@@ -39,6 +39,4 @@ export interface Annotation {
 export interface SitemapEntry {
     url: string;
     timestamp: number;
-    title?: string;
-    anchorText?: string;
 }
