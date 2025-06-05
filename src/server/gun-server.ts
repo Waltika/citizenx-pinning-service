@@ -64,7 +64,7 @@ const gun: any = (Gun as any)({
     batch: false,
 });
 
-bootstrapSiteMapIfNotExist(gun);
+await bootstrapSiteMapIfNotExist(gun);
 
 setupGenerateMetadataEndpoint(app);
 setupIndexNowKeyEndpoint(app);
