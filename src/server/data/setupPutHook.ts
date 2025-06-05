@@ -43,7 +43,6 @@ export function setupPutHook(gun: any) {
                         }
                         if (soul.includes('annotations_') && nodeData.id && nodeData.url && nodeData.timestamp) {
                             addAnnotationToSitemap(nodeData.id, nodeData.url, nodeData.timestamp);
-                            subscribeToNewDomain(gun, nodeData.url);
                         } else if (soul.includes('annotations_')) {
                             console.log(`Skipped incomplete annotation write in ${soul}, data:`, nodeData);
                         }
