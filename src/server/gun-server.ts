@@ -72,13 +72,13 @@ setupIndexNowEndpoint(app);
 setupSitemapRoute(app);
 setupRebuildSitemapRoute(app, gun);
 setupPutHook(gun);
-setupHomepageRoute(app, gun);
 setupAnnotationApi(app, gun);
 setupPageMetadataEndpoint(app, gun);
 setupImageRoute(app, gun);
 setupAnnotationRoute(app, gun);
 setupViewAnnotationRoute(app, gun);
 setupAnnotationDebugApiRoute(app, gun);
+setupHomepageRoute(app, gun);
 
 app.get('/health', (_req: any, res: Response) => res.status(200).json({status: 'ok'}));
 
