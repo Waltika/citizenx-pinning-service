@@ -205,7 +205,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
                                 }
                             });
                         });
-                        setTimeout(resolve, 5000); // Timeout to prevent infinite wait
+                        setTimeout(resolve, 20000); // Timeout to prevent infinite wait
                     });
                 }
             }
