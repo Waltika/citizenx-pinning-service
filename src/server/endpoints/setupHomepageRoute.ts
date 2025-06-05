@@ -90,20 +90,17 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
 
                 // Update or add annotation to cache
                 const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-                const newEntry = {
-                    id: annotation.id,
-                    relativeUrl: `/${annotation.id}/${base64Url}`,
-                    title: annotation.title || 'Untitled Annotation',
-                    anchorText: annotation.anchorText || 'View Annotation',
-                    author: annotation.author,
-                    handle: profile.handle || 'Anonymous',
-                    timestamp: annotation.timestamp,
-                    screenshot: annotation.screenshot ? `/image/${annotation.id}/${base64Url}/image.png` : undefined
-                };
-
-                if (existingIndex >= 0) {
-                    recentAnnotationsCache[existingIndex] = newEntry;
-                } else {
+                if (existingIndex == 0) {
+                    const newEntry = {
+                        id: annotation.id,
+                        relativeUrl: `/${annotation.id}/${base64Url}`,
+                        title: annotation.title || 'Untitled Annotation',
+                        anchorText: annotation.anchorText || 'View Annotation',
+                        author: annotation.author,
+                        handle: profile.handle || 'Anonymous',
+                        timestamp: annotation.timestamp,
+                        screenshot: annotation.screenshot ? `/image/${annotation.id}/${base64Url}/image.png` : undefined
+                    };
                     recentAnnotationsCache.push(newEntry);
                     recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
                     recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
