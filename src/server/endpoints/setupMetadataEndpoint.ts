@@ -7,7 +7,7 @@ export function setupGenerateMetadataEndpoint(app: Express) {
         const { content, url} = req.body;
         if (!content || !url) {
             console.log(`[Generate Metadata] Missing parameters: content=${!!content}, url=${!!url}`);
-            return res.status(400).json({ error: 'Missing content, url, or author' });
+            return res.status(400).json({ error: 'Missing content or url' });
         }
 
         try {
