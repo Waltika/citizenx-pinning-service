@@ -83,9 +83,9 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                     if (annotationId === '_' || !annotation || typeof annotation !== 'object') return;
                     if (!annotation.id || !annotation.url || !annotation.timestamp) return;
 
+                    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
                     // Check if annotation is deleted
                     if (annotation.isDeleted) {
-                        const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
                         if (existingIndex >= 0) {
                             recentAnnotationsCache.splice(existingIndex, 1);
                             console.log(`[DEBUG] Removed deleted annotation ${annotationId} from cache, cache size: ${recentAnnotationsCache.length}`);
@@ -93,8 +93,6 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                         return;
                     }
 
-                    // Skip if annotation already exists in cache (immutable)
-                    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
                     if (existingIndex !== -1) return;
 
                     const base64Url = Buffer.from(annotation.url).toString('base64')
@@ -102,6 +100,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                         .replace(/\//g, '_')
                         .replace(/=/g, '');
 
+                    console.log(`[DEBUG] New annotation ${annotationId} detected, cache size: ${recentAnnotationsCache.length}`);
                     // Fetch or use cached profile (avoid async in listener)
                     let profile = profileCache.get(annotation.author);
                     if (!profile) {
