@@ -5,6 +5,7 @@ import { publicUrl } from "../config/index.js";
 import { getShardKey } from "../utils/shardUtils.js";
 import { fromUrlSafeBase64 } from "../utils/fromUrlSafeBase64.js";
 import { sitemapUrls } from "../utils/sitemap/addAnnotationsToSitemap.js";
+import {Annotation} from "../types/types.js";
 
 // Cache for recent annotations and profiles
 const recentAnnotationsCache: Array<{
@@ -191,22 +192,49 @@ export function setupHomepageRoute(app: Express, gun: any) {
                 }
 
                 for (const shard of shards) {
-                    console.log(`[DEBUG] Scanning shard for cache init: ${shard}`);
-                    await new Promise<void>((resolve) => {
-                        gun.get(shard).map().once((urlData: any, url: string) => {
-                            if (!url || url === '_' || !urlData || typeof urlData !== 'object') {
-                                console.log(`[DEBUG] No valid URL data in shard: ${shard}, URL: ${url}`);
-                                return;
-                            }
-                            console.log(`[DEBUG] Found URL in shard: ${shard}, URL: ${url}`);
-                            gun.get(shard).get(url).map().once((annotation: any, annotationId: string) => {
-                                if (annotation && !annotation.isDeleted && annotation.id && annotation.url && annotation.timestamp) {
-                                    console.log(`[DEBUG] Found annotation in shard: ${shard}, URL: ${url}, ID: ${annotationId} and adding it to annotationsMap`);
-                                    annotationsMap.set(annotationId, { ...annotation, shard });
-                                }
-                            });
+                    console.log(`[DEBUG] Starting fetch for shard: ${shard}`);
+                    let shardProcessed = false;
+                    const shardData = await new Promise<any>((resolve) => {
+                        gun.get(shard).once((data: any) => {
+                            resolve(data || {});
                         });
+                        setTimeout(() => {
+                            if (!shardProcessed) {
+                                console.warn(`[DEBUG] Timeout after 30 seconds fetching shard: ${shard}`);
+                                resolve({});
+                            }
+                        }, 30000); // Increased timeout to 30 seconds
                     });
+                    shardProcessed = true;
+                    console.log(`[DEBUG] Fetched shard data for ${shard}, data size: ${Object.keys(shardData).length}`);
+
+                    // Process URLs in the shard
+                    let urlCount = 0;
+                    let annotationCount = 0;
+                    for (const [url, urlData] of Object.entries(shardData)) {
+                        if (url === '_' || !url || !urlData || typeof urlData !== 'object') {
+                            console.log(`[DEBUG] Skipping invalid URL data in shard: ${shard}, URL: ${url}`);
+                            continue;
+                        }
+                        urlCount++;
+                        console.log(`[DEBUG] Found URL in shard: ${shard}, URL: ${url}`);
+
+                        // Process annotations for this URL
+                        for (const [annotationId, annotation] of Object.entries(urlData as Annotation)) {
+                            if (annotationId === '_' || !annotation || typeof annotation !== 'object') {
+                                console.log(`[DEBUG] Skipping invalid annotation in shard: ${shard}, URL: ${url}, ID: ${annotationId}`);
+                                continue;
+                            }
+                            if (annotation.isDeleted || !annotation.id || !annotation.url || !annotation.timestamp) {
+                                console.log(`[DEBUG] Skipping deleted or invalid annotation in shard: ${shard}, URL: ${url}, ID: ${annotationId}`);
+                                continue;
+                            }
+                            annotationCount++;
+                            console.log(`[DEBUG] Found annotation in shard: ${shard}, URL: ${url}, ID: ${annotationId}, adding to annotationsMap`);
+                            annotationsMap.set(annotationId, { ...annotation, shard });
+                        }
+                    }
+                    console.log(`[DEBUG] Completed shard ${shard}: ${urlCount} URLs, ${annotationCount} valid annotations`);
                 }
             }
 
@@ -244,7 +272,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
             // Sort cache by timestamp
             recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
             recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS); // Keep only 30
-            console.log(`[DEBUG] Initialized homepage cache with ${recentAnnotationsCache.length} annotations`);
+            console.log(`[DEBUG] Initialized homepage cache with ${recentAnnotationsCache.length} annotations, total annotations found: ${annotationsMap.size}`);
         } catch (error) {
             console.error('[DEBUG] Error initializing homepage cache:', error);
         }
