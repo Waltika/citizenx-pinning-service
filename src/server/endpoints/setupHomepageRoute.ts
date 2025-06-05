@@ -108,7 +108,6 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                     recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
                     recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
                 }
-                console.log(`[DEBUG] Updated cache for annotation ${annotationId} in shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
             });
         });
     }
