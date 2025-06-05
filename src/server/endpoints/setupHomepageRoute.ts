@@ -90,7 +90,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
 
                 // Update or add annotation to cache
                 const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-                if (existingIndex == 0) {
+                if (existingIndex === -1) {
                     const newEntry = {
                         id: annotation.id,
                         relativeUrl: `/${annotation.id}/${base64Url}`,
@@ -99,7 +99,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                         author: annotation.author,
                         handle: profile.handle || 'Anonymous',
                         timestamp: annotation.timestamp,
-                        screenshot: annotation.screenshot ? `/image/${annotation.id}/${base64Url}/image.png` : undefined
+                        screenshot: `/image/${annotation.id}/${base64Url}/image.png`
                     };
                     recentAnnotationsCache.push(newEntry);
                     recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
@@ -191,7 +191,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
                     author: annotation.author,
                     handle,
                     timestamp: annotation.timestamp,
-                    screenshot: annotation.screenshot ? `/image/${annotation.id}/${base64Url}/image.png` : undefined
+                    screenshot: `/image/${annotation.id}/${base64Url}/image.png`
                 });
             }
 
