@@ -3,6 +3,7 @@ import {verifyGunWrite} from "../utils/verifyGunWrite.js";
 import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.js";
 import {publicUrl} from "../config/index.js";
 import {PeerData} from "../utils/rateLimit.js";
+import {subscribeToNewDomain} from "../endpoints/setupHomepageRoute.js";
 
 export function setupPutHook(gun: any) {
 // Modified put hook to capture annotation writes and update sitemap
@@ -42,6 +43,7 @@ export function setupPutHook(gun: any) {
                         }
                         if (soul.includes('annotations_') && nodeData.id && nodeData.url && nodeData.timestamp) {
                             addAnnotationToSitemap(nodeData.id, nodeData.url, nodeData.timestamp);
+                            subscribeToNewDomain(gun, nodeData.url);
                         } else if (soul.includes('annotations_')) {
                             console.log(`Skipped incomplete annotation write in ${soul}, data:`, nodeData);
                         }

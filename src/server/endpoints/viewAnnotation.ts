@@ -9,6 +9,7 @@ import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.j
 import {publicUrl, websiteUrl} from "../config/index.js";
 import {appendUtmParams} from "../utils/appendUtmParams.js";
 import {getProfileWithRetries} from "../data/getProfileWithRetries.js";
+import {subscribeToNewDomain} from "./setupHomepageRoute.js";
 
 export function setupViewAnnotationRoute(app: Express, gun : any) {
 // Update /viewannotation/... to add to sitemap
@@ -67,6 +68,7 @@ export function setupViewAnnotationRoute(app: Express, gun : any) {
             }
 
             addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+            subscribeToNewDomain(gun, annotation.url);
 
             console.log(`[DEBUG] Annotation found:`, annotationId);
             const profile = await getProfileWithRetries(gun, annotation.author);

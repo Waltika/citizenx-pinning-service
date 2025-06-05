@@ -9,6 +9,7 @@ import {fetchPageMetadata} from "../utils/fetchPageMetadata.js";
 import {stripHtml} from "../utils/stripHtml.js";
 import {publicUrl, websiteUrl} from "../config/index.js";
 import {appendUtmParams} from "../utils/appendUtmParams.js";
+import {subscribeToNewDomain} from "./setupHomepageRoute.js";
 
 export function setupAnnotationRoute(app: Express, gun: any) {
     app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
@@ -64,6 +65,8 @@ export function setupAnnotationRoute(app: Express, gun: any) {
             }
 
             addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+            subscribeToNewDomain(gun, annotation.url);
+
 
             console.log(`[DEBUG] Annotation found:`, annotationId);
             const profile = await getProfileWithRetries(gun, annotation.author);
