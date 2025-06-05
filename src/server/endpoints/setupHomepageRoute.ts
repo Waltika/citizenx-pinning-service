@@ -18,7 +18,7 @@ const recentAnnotationsCache: Array<{
     screenshot?: string;
 }> = [];
 const profileCache = new Map<string, { handle: string }>();
-const MAX_CACHED_ANNOTATIONS = 30;
+const MAX_CACHED_ANNOTATIONS = 20;
 
 // Track subscribed domains and shards
 const subscribedDomains = new Set<string>();
