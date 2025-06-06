@@ -8,6 +8,7 @@ import sharp from "sharp";
 import {subscribeToNewDomain} from "./setupHomepageRoute.js";
 
 export function setupImageRoute(app: Express, gun: any) {
+// Update /image/... to add to sitemap
     app.get('/image/:annotationId/:base64Url/image.png', async (req: Request, res: Response) => {
         console.log(`[DEBUG] /image called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
 
@@ -105,12 +106,12 @@ export function setupImageRoute(app: Express, gun: any) {
                 const processedBuffer = await sharp(imageBuffer)
                     .extract({left, top, width: cropWidth, height: cropHeight})
                     .resize({width: targetWidth, height: targetHeight, fit: 'fill'})
-                    .toFormat("png", { compressionLevel: 9, palette: true, colors: 256, effort: 7 }) // Optimize PNG compression
+                    .toFormat("png")
                     .toBuffer();
 
                 res.set('Content-Type', `image/${base64Match[1]}`);
                 res.send(processedBuffer);
-                console.log(`[DEBUG] Processed PNG image sent, size: ${processedBuffer.length} bytes`);
+                console.log(`[DEBUG] Processed image sent, size: ${processedBuffer.length} bytes`);
             } catch (sharpError) {
                 console.error(`[DEBUG] Error processing image with sharp:`, sharpError);
                 res.set('Content-Type', `image/${base64Match[1]}`);
