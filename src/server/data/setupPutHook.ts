@@ -3,6 +3,7 @@ import {verifyGunWrite} from "../utils/verifyGunWrite.js";
 import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.js";
 import {publicUrl} from "../config/index.js";
 import {PeerData} from "../utils/rateLimit.js";
+import {subscribeToNewDomain} from "../endpoints/setupHomepageRoute.js";
 
 export function setupPutHook(gun: any) {
 // Modified put hook to capture annotation writes and update sitemap

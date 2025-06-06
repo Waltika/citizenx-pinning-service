@@ -9,7 +9,7 @@ import {fetchPageMetadata} from "../utils/fetchPageMetadata.js";
 import {stripHtml} from "../utils/stripHtml.js";
 import {publicUrl, websiteUrl} from "../config/index.js";
 import {appendUtmParams} from "../utils/appendUtmParams.js";
-import {cacheNewAnnotation, subscribeToNewDomain} from "./setupHomepageRoute.js";
+import {subscribeToNewDomain} from "./setupHomepageRoute.js";
 
 export function setupAnnotationRoute(app: Express, gun: any) {
     app.get('/:annotationId/:base64Url', async (req: Request, res: Response) => {
@@ -65,7 +65,6 @@ export function setupAnnotationRoute(app: Express, gun: any) {
             }
 
             addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
-            cacheNewAnnotation(annotation, gun, subShard || domainShard);
             subscribeToNewDomain(gun, annotation.url);
 
 

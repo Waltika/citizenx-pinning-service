@@ -6,7 +6,7 @@ import {Annotation, Metadata} from "../../types/types.js";
 import {addAnnotationToSitemap} from "../../utils/sitemap/addAnnotationsToSitemap.js";
 import {fetchPageMetadata} from "../../utils/fetchPageMetadata.js";
 import {throttleLog} from "../../utils/throttleLog.js";
-import {cacheNewAnnotation, subscribeToNewDomain} from "../setupHomepageRoute.js";
+import {subscribeToNewDomain} from "../setupHomepageRoute.js";
 
 
 // Annotation cache with expiration
@@ -70,11 +70,10 @@ export function setupAnnotationApi(app: Express, gun: any) {
                         screenshot: annotation.screenshot,
                         metadata: annotation.metadata || {},
                         isDeleted: annotation.isDeleted || false,
-                        title: annotation.title,
-                        anchorText: annotation.anchorText
+                        title : annotation.title,
+                        anchorText : annotation.anchorText
                     });
                     addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
-                    cacheNewAnnotation(annotation, gun, subShard || domainShard);
                     subscribeToNewDomain(gun, annotation.url);
                 };
 

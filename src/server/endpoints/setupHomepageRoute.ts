@@ -250,10 +250,10 @@ export function setupHomepageRoute(app: Express, gun: any) {
                         await new Promise<void>((resolve) => {
                             let urlProcessed = false;
                             const urlTimeout = setTimeout(() => {
-                                console.warn(`[DEBUG] Timeout after 5 seconds fetching annotations for URL: ${url} in shard: ${shard}`);
+                                console.warn(`[DEBUG] Timeout after 20 seconds fetching annotations for URL: ${url} in shard: ${shard}`);
                                 urlProcessed = true;
                                 resolve();
-                            }, 5000);
+                            }, 20000);
 
                             gun.get(shard).get(url).map().once((annotation: Annotation, annotationId: string) => {
                                 if (urlProcessed) return;
