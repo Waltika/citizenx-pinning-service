@@ -42,7 +42,7 @@ Return JSON:
             },
             {
                 headers: {
-                    'Authorization': `Bearer xai-7FYZypTGrdZEbgxfkIpprddIG1MG3GDmCtR1zpLgJsccem9TZpLRDWaFyit3KrV807U4kkgAwN8IPQ5z`,
+                    'Authorization': `Bearer xai-kxX7UiOhEACaL5TcD0bdXxlVscxoAS04zKPTL0u0YyJ0tnjFKZ2RRHq6MHCa4wHu9mFmiAgbvZY0gdPM`,
                     'Content-Type': 'application/json'
                 }
             }
