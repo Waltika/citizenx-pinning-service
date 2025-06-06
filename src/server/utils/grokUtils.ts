@@ -12,6 +12,8 @@ function simpleHash(str: string): string {
     return hash.toString();
 }
 
+let grokApiKey: string = process.env.GROK_KEY || '';
+
 export async function generateMetadata(content: string, url: string): Promise<{title: string, anchorText: string}> {
     const cleanContent = stripHtml(content).substring(0, 1000); // Limit content size
     try {
@@ -42,7 +44,7 @@ Return JSON:
             },
             {
                 headers: {
-                    'Authorization': `Bearer xai-7FYZypTGrdZEbgxfkIpprddIG1MG3GDmCtR1zpLgJsccem9TZpLRDWaFyit3KrV807U4kkgAwN8IPQ5z`,
+                    'Authorization': `Bearer ${grokApiKey}`,
                     'Content-Type': 'application/json'
                 }
             }
