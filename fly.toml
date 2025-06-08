@@ -3,6 +3,9 @@ primary_region = "fra"
 
 [build]
   builder = "heroku/builder:22"
+  buildpacks = ["heroku/nodejs"]
+  [build.args]
+    NPM_CONFIG_PRODUCTION = "true"
 
 [env]
   PORT = "10000"
