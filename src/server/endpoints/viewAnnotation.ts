@@ -11,7 +11,7 @@ import {appendUtmParams} from "../utils/appendUtmParams.js";
 import {getProfileWithRetries} from "../data/getProfileWithRetries.js";
 import {cacheNewAnnotation, subscribeToNewDomain} from "./setupHomepageRoute.js";
 
-export function setupViewAnnotationRoute(app: Express, gun : any) {
+export function setupViewAnnotationRoute(app: Express, gun: any) {
 // Update /viewannotation/... to add to sitemap
     app.get('/viewannotation/:annotationId/:base64Url', async (req: Request, res: Response) => {
         console.log(`[DEBUG] /viewannotation called with annotationId: ${req.params.annotationId}, base64Url: ${req.params.base64Url}`);
