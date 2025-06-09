@@ -1,8 +1,8 @@
 import {Express, Request, Response} from "express";
-import {sitemapUrls} from "../utils/sitemap/addAnnotationsToSitemap.js";
+import {sitemapUrls} from "../../../utils/sitemap/addAnnotationsToSitemap.js";
 import fs from "fs";
-import {sitemapPath} from "../config/index.js";
-import {serveSitemap} from "../utils/sitemap/serveSitemap.js";
+import {sitemapPath} from "../../../config/index.js";
+import {serveSitemap} from "../../../utils/sitemap/serveSitemap.js";
 
 export function setupSitemapRoute(app : Express) {
 // Serve sitemap.xml

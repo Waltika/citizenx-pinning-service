@@ -1,5 +1,5 @@
 import {Express, Request, Response} from "express";
-import {getIndexNowKey} from "../utils/sitemap/indexnow.js";
+import {getIndexNowKey} from "../../../utils/sitemap/indexnow.js";
 
 export function setupIndexNowKeyEndpoint(app : Express) {
 // Serve IndexNow key file

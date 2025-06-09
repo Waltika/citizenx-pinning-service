@@ -1,10 +1,10 @@
 import {Express, Request, Response} from "express";
-import {Metadata} from "../types/types.js";
-import {fetchPageMetadata} from "../utils/fetchPageMetadata.js";
-import {normalizeUrl} from "../utils/normalizeUrl.js";
-import {getShardKey} from "../utils/shardUtils.js";
-import {addAnnotationToSitemap} from "../utils/sitemap/addAnnotationsToSitemap.js";
-import {subscribeToNewDomain} from "./setupHomepageRoute.js";
+import {Metadata} from "../../types/types.js";
+import {fetchPageMetadata} from "../../utils/fetchPageMetadata.js";
+import {normalizeUrl} from "../../utils/normalizeUrl.js";
+import {getShardKey} from "../../utils/shardUtils.js";
+import {addAnnotationToSitemap} from "../../utils/sitemap/addAnnotationsToSitemap.js";
+import {subscribeToNewDomain} from "../setupHomepageRoute.js";
 
 export function setupPageMetadataEndpoint(app: Express, gun: any) {
 // Update /api/page-metadata to add to sitemap

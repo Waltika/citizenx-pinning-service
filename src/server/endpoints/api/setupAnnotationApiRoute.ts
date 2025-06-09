@@ -13,7 +13,7 @@ import {subscribeToNewDomain} from "../setupHomepageRoute.js";
 const annotationCache = new Map<string, number>();
 const ANNOTATION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-export function setupAnnotationApi(app: Express, gun: any) {
+export function setupAnnotationApiRoute(app: Express, gun: any) {
 // Update /api/annotations to add to sitemap
     app.get('/api/annotations', async (req: Request, res: Response) => {
         const totalStartTime = Date.now();

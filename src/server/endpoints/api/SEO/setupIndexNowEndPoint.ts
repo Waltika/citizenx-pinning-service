@@ -1,6 +1,6 @@
-import {limiter} from "../utils/rateLimit.js";
+import {limiter} from "../../../utils/rateLimit.js";
 import {Express, Request, Response} from "express";
-import {indexNowQueue, submitIndexNowUrls} from "../utils/sitemap/indexnow.js";
+import {indexNowQueue, submitIndexNowUrls} from "../../../utils/sitemap/indexnow.js";
 
 export function setupIndexNowEndpoint(app: Express) {
 // Manual IndexNow submission endpoint (optional)

@@ -4,23 +4,23 @@ import express, {Express, Response} from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import {limiter} from './utils/rateLimit.js';
-import {setupAnnotationDebugApiRoute} from "./endpoints/api/debug/annotations.js";
+import {setupAnnotationDebugApiRoute} from "./endpoints/api/debug/setupAnnotationDebugApiRoute.js";
 import {baseDataDir, dataDir, initialPeers, publicUrl} from './config/index.js';
-import {setupViewAnnotationRoute} from "./endpoints/viewAnnotation.js";
+import {setupViewAnnotationRoute} from "./endpoints/setupViewAnnotationRoute.js";
 import {bootstrapSiteMapIfNotExist} from "./utils/bootstrapSitemap.js";
-import {setupSitemapRoute} from "./endpoints/sitemap.js";
-import {setupRebuildSitemapRoute} from "./endpoints/setupRebuildSitemapRoute.js";
-import {setupAnnotationRoute} from "./endpoints/setupAnnoationRoute.js";
+import {setupSitemapRoute} from "./endpoints/api/SEO/setupSitemapRoute.js";
+import {setupRebuildSitemapRoute} from "./endpoints/api/SEO/setupRebuildSitemapRoute.js";
+import {setupAnnotationRoute} from "./endpoints/setupAnnotationRoute.js";
 import {setupImageRoute} from "./endpoints/setupImageRoute.js";
-import {setupAnnotationApi} from "./endpoints/api/setupAnnotationApi.js";
-import {setupPageMetadataEndpoint} from "./endpoints/setupPageMetadataEndpoint.js";
+import {setupAnnotationApiRoute} from "./endpoints/api/setupAnnotationApiRoute.js";
+import {setupPageMetadataEndpoint} from "./endpoints/api/setupPageMetadataEndpoint.js";
 import {setupHomepageRoute} from "./endpoints/setupHomepageRoute.js";
 import {setupPutHook} from "./data/setupPutHook.js";
-import {setupOnHook} from "./data/setupOnHook.js";
-import {setupIndexNowEndpoint} from "./endpoints/setupIndexNowEndPoint.js";
-import {setupIndexNowKeyEndpoint} from "./endpoints/setupIndexNowKeyEndpoint.js";
-import {setupGenerateMetadataEndpoint} from "./endpoints/setupMetadataEndpoint.js";
-import {setupYandexIconRoute} from "./endpoints/setupYandexIconRoute.js";
+import {setupIndexNowEndpoint} from "./endpoints/api/SEO/setupIndexNowEndPoint.js";
+import {setupIndexNowKeyEndpoint} from "./endpoints/api/SEO/setupIndexNowKeyEndpoint.js";
+import {setupGenerateMetadataEndpoint} from "./endpoints/api/setupGenerateMetadataEndpoint.js";
+import {setupYandexIconRoute} from "./endpoints/api/SEO/setupYandexIconRoute.js";
+import {setupShortenRoute} from "./endpoints/api/setupShortenRoute.js";
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
 
@@ -67,6 +67,7 @@ const gun: any = (Gun as any)({
 
 await bootstrapSiteMapIfNotExist(gun);
 
+setupShortenRoute(app);
 setupYandexIconRoute(app);
 setupGenerateMetadataEndpoint(app);
 setupIndexNowKeyEndpoint(app);
@@ -74,7 +75,7 @@ setupIndexNowEndpoint(app);
 setupSitemapRoute(app);
 setupRebuildSitemapRoute(app, gun);
 setupPutHook(gun);
-setupAnnotationApi(app, gun);
+setupAnnotationApiRoute(app, gun);
 setupPageMetadataEndpoint(app, gun);
 setupImageRoute(app, gun);
 setupAnnotationRoute(app, gun);

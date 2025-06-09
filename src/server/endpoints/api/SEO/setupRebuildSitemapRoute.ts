@@ -1,6 +1,6 @@
 import {Express, Request, Response} from "express";
-import {sitemapUrls} from "../utils/sitemap/addAnnotationsToSitemap.js";
-import {bootstrapSitemap} from "../utils/bootstrapSitemap.js";
+import {sitemapUrls} from "../../../utils/sitemap/addAnnotationsToSitemap.js";
+import {bootstrapSitemap} from "../../../utils/bootstrapSitemap.js";
 
 export function setupRebuildSitemapRoute(app: Express, gun: any) {
     app.get('/api/debug/rebuild-sitemap', async (_req: Request, res: Response) => {
