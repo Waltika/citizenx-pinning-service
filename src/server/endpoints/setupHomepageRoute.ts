@@ -6,6 +6,7 @@ import { getShardKey } from "../utils/shardUtils.js";
 import { fromUrlSafeBase64 } from "../utils/fromUrlSafeBase64.js";
 import { sitemapUrls } from "../utils/sitemap/addAnnotationsToSitemap.js";
 import { Annotation } from "../types/types.js";
+import { Mutex } from "async-mutex"; // Add this import
 
 // Simplified type for GUN metadata (the "_" key)
 interface GUNMetadata {
@@ -27,6 +28,9 @@ const recentAnnotationsCache: Array<{
 }> = [];
 const profileCache = new Map<string, { handle: string }>();
 const MAX_CACHED_ANNOTATIONS = 30;
+
+// Mutex to synchronize access to recentAnnotationsCache
+const cacheMutex = new Mutex();
 
 // Track subscribed domains and shards
 const subscribedDomains = new Set<string>();
@@ -58,74 +62,81 @@ function getDomainsFromSitemap(): string[] {
     return Array.from(domains);
 }
 
-export function cacheNewAnnotation(annotation: Annotation, gun : any, shard : string) {
-    // Check if annotation is deleted
-    const annotationId = annotation.id;
-    if (annotation.isDeleted) {
-        const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-        if (existingIndex >= 0) {
-            recentAnnotationsCache.splice(existingIndex, 1);
-            console.log(`[DEBUG] Removed deleted annotation ${annotationId} from cache, cache size: ${recentAnnotationsCache.length}`);
-        }
-        return;
-    }
-
-    // Skip if annotation already exists in cache (immutable)
-    const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-    if (existingIndex !== -1) return;
-
-    const base64Url = Buffer.from(annotation.url).toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-
-    // Fetch or use cached profile (avoid async in listener)
-    let profile = profileCache.get(annotation.author);
-    if (!profile) {
-        // Defer profile fetching to break the call stack
-        setImmediate(async () => {
-            try {
-                profile = await getProfileWithRetries(gun, annotation.author);
-                profileCache.set(annotation.author, {handle: profile.handle || 'Anonymous'});
-
-                // Add annotation to cache if still not present
-                const recheckIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-                if (recheckIndex !== -1) return;
-
-                const newEntry = {
-                    id: annotation.id,
-                    relativeUrl: `/${annotation.id}/${base64Url}`,
-                    title: annotation.title || 'Untitled Annotation',
-                    anchorText: annotation.anchorText || 'View Annotation',
-                    author: annotation.author,
-                    handle: profile.handle || 'Anonymous',
-                    timestamp: annotation.timestamp,
-                    screenshot: `/image/${annotation.id}/${base64Url}/image.png`
-                };
-                recentAnnotationsCache.push(newEntry);
-                recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
-                recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
-                console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
-            } catch (error) {
-                console.error(`[DEBUG] Error fetching profile for ${annotation.author}:`, error);
+export async function cacheNewAnnotation(annotation: Annotation, gun: any, shard: string) {
+    const release = await cacheMutex.acquire(); // Acquire mutex
+    try {
+        const annotationId = annotation.id;
+        if (annotation.isDeleted) {
+            const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+            if (existingIndex >= 0) {
+                recentAnnotationsCache.splice(existingIndex, 1);
+                console.log(`[DEBUG] Removed deleted annotation ${annotationId} from cache, cache size: ${recentAnnotationsCache.length}`);
             }
-        });
-    } else {
-        // Add annotation to cache synchronously if profile is cached
-        const newEntry = {
-            id: annotation.id,
-            relativeUrl: `/${annotation.id}/${base64Url}`,
-            title: annotation.title || 'Untitled Annotation',
-            anchorText: annotation.anchorText || 'View Annotation',
-            author: annotation.author,
-            handle: profile.handle || 'Anonymous',
-            timestamp: annotation.timestamp,
-            screenshot: `/image/${annotation.id}/${base64Url}/image.png`
-        };
-        recentAnnotationsCache.push(newEntry);
-        recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
-        recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
-        console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+            return;
+        }
+
+        const existingIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+        if (existingIndex !== -1) return;
+
+        const base64Url = Buffer.from(annotation.url).toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
+
+        let profile = profileCache.get(annotation.author);
+        if (!profile) {
+            // Defer profile fetching to break the call stack
+            setImmediate(async () => {
+                try {
+                    const releaseInner = await cacheMutex.acquire(); // Re-acquire mutex for async operation
+                    try {
+                        profile = await getProfileWithRetries(gun, annotation.author);
+                        profileCache.set(annotation.author, { handle: profile.handle || 'Anonymous' });
+
+                        // Add annotation to cache if still not present
+                        const recheckIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+                        if (recheckIndex !== -1) return;
+
+                        const newEntry = {
+                            id: annotation.id,
+                            relativeUrl: `/${annotation.id}/${base64Url}`,
+                            title: annotation.title || 'Untitled Annotation',
+                            anchorText: annotation.anchorText || 'View Annotation',
+                            author: annotation.author,
+                            handle: profile.handle || 'Anonymous',
+                            timestamp: annotation.timestamp,
+                            screenshot: `/image/${annotation.id}/${base64Url}/image.png`
+                        };
+                        recentAnnotationsCache.push(newEntry);
+                        recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
+                        recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
+                        console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+                    } finally {
+                        releaseInner(); // Release inner mutex
+                    }
+                } catch (error) {
+                    console.error(`[DEBUG] Error fetching profile for ${annotation.author}:`, error);
+                }
+            });
+        } else {
+            // Add annotation to cache synchronously if profile is cached
+            const newEntry = {
+                id: annotation.id,
+                relativeUrl: `/${annotation.id}/${base64Url}`,
+                title: annotation.title || 'Untitled Annotation',
+                anchorText: annotation.anchorText || 'View Annotation',
+                author: annotation.author,
+                handle: profile.handle || 'Anonymous',
+                timestamp: annotation.timestamp,
+                screenshot: `/image/${annotation.id}/${base64Url}/image.png`
+            };
+            recentAnnotationsCache.push(newEntry);
+            recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
+            recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
+            console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+        }
+    } finally {
+        release(); // Release mutex
     }
 }
 

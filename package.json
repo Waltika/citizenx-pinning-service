@@ -11,6 +11,7 @@
     "diagnostic": "node scripts/libp2p-diagnostic.js"
   },
   "dependencies": {
+    "async-mutex": "^0.5.0",
     "axios": "^1.6.7",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
