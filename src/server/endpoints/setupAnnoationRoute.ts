@@ -68,7 +68,6 @@ export function setupAnnotationRoute(app: Express, gun: any) {
             cacheNewAnnotation(annotation, gun, subShard || domainShard);
             subscribeToNewDomain(gun, annotation.url);
 
-
             console.log(`[DEBUG] Annotation found:`, annotationId);
             const profile = await getProfileWithRetries(gun, annotation.author);
             console.log(`[DEBUG] Fetched profile for author: ${annotation.author}, profile:`, profile);
@@ -212,6 +211,7 @@ export function setupAnnotationRoute(app: Express, gun: any) {
             line-height: 1.75;
             transition: background-color 0.3s ease;
             cursor: pointer;
+            touch-action: manipulation; /* Improve touch responsiveness */
         }
         .view-link:hover, .share-button:hover {
             background-color: #393b3c;
@@ -290,7 +290,7 @@ export function setupAnnotationRoute(app: Express, gun: any) {
         <div class="content">${annotation.content}</div>
         ${image !== defaultImage ? `<img src="${image}" alt="Annotation screenshot" class="screenshot">` : ''}
         <div class="button-container">
-            <a href="${viewUrl}" class="view-link">Get the Extension to Annotate on CitizenX</a>
+            <a href="${viewUrl}" class="view-link">Get the Extension to Annotate</a>
             <div class="tooltip">
                 <button id="share-button" class="share-button" title="Share this annotation" aria-label="Share annotation">
                     <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -306,6 +306,7 @@ export function setupAnnotationRoute(app: Express, gun: any) {
     <script>
         const shareButton = document.getElementById('share-button');
         const toast = document.getElementById('toast');
+        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
 
         function showToast(message, type) {
             toast.textContent = message;
@@ -335,9 +336,25 @@ export function setupAnnotationRoute(app: Express, gun: any) {
                     console.error('Failed to shorten URL:', err);
                     showToast('Failed to shorten URL, using long URL', 'error');
                 }
-                const shareContent = '${shareText.replace(/'/g, "\\'")} ' + shareUrl;
-                await navigator.clipboard.writeText(shareContent);
-                showToast('Link copied to clipboard!', 'success');
+
+                if (isMobile && navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: '${title.replace(/'/g, "\\'")}',
+                            text: '${shareText.replace(/'/g, "\\'")}',
+                            url: shareUrl
+                        });
+                        showToast('Shared successfully!', 'success');
+                    } catch (shareErr) {
+                        console.error('Failed to share on mobile:', shareErr);
+                        showToast('Sharing failed, copying to clipboard', 'error');
+                        await navigator.clipboard.writeText(shareUrl);
+                        showToast('Link copied to clipboard!', 'success');
+                    }
+                } else {
+                    await navigator.clipboard.writeText(shareUrl);
+                    showToast('Link copied to clipboard!', 'success');
+                }
             } catch (err) {
                 console.error('Failed to copy share link:', err);
                 showToast('Failed to copy link', 'error');
