@@ -64,10 +64,8 @@ export function setupAnnotationRoute(app: Express, gun: any) {
                 return res.status(404).send('Annotation not found');
             }
 
-            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp).then(_r => {
-            });
-            cacheNewAnnotation(annotation, gun, subShard || domainShard).then(_r => {
-            });
+            addAnnotationToSitemap(annotation.id, annotation.url, annotation.timestamp);
+            cacheNewAnnotation(annotation, gun, subShard || domainShard);
             subscribeToNewDomain(gun, annotation.url);
 
             console.log(`[DEBUG] Annotation found:`, annotationId);
@@ -331,10 +329,7 @@ export function setupAnnotationRoute(app: Express, gun: any) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ url: longUrl })
                     });
-                    if (!response.ok) { 
-                        // noinspection ExceptionCaughtLocallyJS
-                        throw new Error('Failed to shorten URL'); 
-                    }
+                    if (!response.ok) throw new Error('Failed to shorten URL');
                     const data = await response.json();
                     shareUrl = data.shortUrl || longUrl;
                 } catch (err) {

@@ -1,6 +1,6 @@
-import {Express, Request, Response} from 'express';
-import {generateMetadata} from '../../utils/grokUtils.js';
-import {limiter} from '../../utils/rateLimit.js';
+import { Express, Request, Response } from 'express';
+import { generateMetadata } from '../../utils/grokUtils.js';
+import { limiter } from '../../utils/rateLimit.js';
 
 export function setupGenerateMetadataEndpoint(app: Express) {
     app.post('/api/generate-metadata', limiter, async (req: Request, res: Response) => {

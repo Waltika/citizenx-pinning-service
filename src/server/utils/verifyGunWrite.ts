@@ -1,6 +1,6 @@
 import SEA from 'gun/sea.js';
-import {checkRateLimit} from './rateLimit.js';
-import {IGunInstance} from 'gun';
+import { checkRateLimit } from './rateLimit.js';
+import { IGunInstance } from 'gun';
 
 export async function verifyGunWrite(data: any, key: string, msg: any, eve: any, gun: IGunInstance<any>): Promise<boolean> {
     if (key === 'test' || key.startsWith('knownPeers')) {
