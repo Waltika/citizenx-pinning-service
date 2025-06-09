@@ -20,6 +20,7 @@ import {setupOnHook} from "./data/setupOnHook.js";
 import {setupIndexNowEndpoint} from "./endpoints/setupIndexNowEndPoint.js";
 import {setupIndexNowKeyEndpoint} from "./endpoints/setupIndexNowKeyEndpoint.js";
 import {setupGenerateMetadataEndpoint} from "./endpoints/setupMetadataEndpoint.js";
+import {setupYandexIconRoute} from "./endpoints/setupYandexIconRoute.js";
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
 
@@ -66,6 +67,7 @@ const gun: any = (Gun as any)({
 
 await bootstrapSiteMapIfNotExist(gun);
 
+setupYandexIconRoute(app);
 setupGenerateMetadataEndpoint(app);
 setupIndexNowKeyEndpoint(app);
 setupIndexNowEndpoint(app);

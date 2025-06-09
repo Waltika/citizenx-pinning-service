@@ -387,6 +387,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
     <title>CitizenX Annotations - Collaborative Web Commentary</title>
     <link rel="canonical" href="${publicUrl}/">
     <link rel="icon" type="image/png" href="https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/68108692c71e654b6795ed9b_icon32.png">
+    <link rel="icon" href="/yandex-logo.png" type="image/x-icon">
     <meta property="og:title" content="CitizenX Annotations - Collaborative Web Commentary">
     <meta property="og:description" content="Discover recent web annotations created with CitizenX. Join the conversation and annotate the web at citizenx.app.">
     <meta property="og:image" content="${recentAnnotations[0]?.screenshot || 'https://cdn.prod.website-files.com/680f69f3e9fbaac421f2d022/680f776940da22ef40402db5_Screenshot%202025-04-28%20at%2014.40.29.png'}">
