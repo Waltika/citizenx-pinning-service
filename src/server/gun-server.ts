@@ -8,18 +8,18 @@ import {setupAnnotationDebugApiRoute} from "./endpoints/api/debug/setupAnnotatio
 import {baseDataDir, dataDir, initialPeers, publicUrl} from './config/index.js';
 import {setupViewAnnotationRoute} from "./endpoints/setupViewAnnotationRoute.js";
 import {bootstrapSiteMapIfNotExist} from "./utils/bootstrapSitemap.js";
-import {setupSitemapRoute} from "./endpoints/api/SEO/setupSitemapRoute.js";
-import {setupRebuildSitemapRoute} from "./endpoints/api/SEO/setupRebuildSitemapRoute.js";
+import {setupSitemapRoute} from "./endpoints/api/seo/setupSitemapRoute.js";
+import {setupRebuildSitemapRoute} from "./endpoints/api/seo/setupRebuildSitemapRoute.js";
 import {setupAnnotationRoute} from "./endpoints/setupAnnotationRoute.js";
 import {setupImageRoute} from "./endpoints/setupImageRoute.js";
 import {setupAnnotationApiRoute} from "./endpoints/api/setupAnnotationApiRoute.js";
 import {setupPageMetadataEndpoint} from "./endpoints/api/setupPageMetadataEndpoint.js";
 import {setupHomepageRoute} from "./endpoints/setupHomepageRoute.js";
 import {setupPutHook} from "./data/setupPutHook.js";
-import {setupIndexNowEndpoint} from "./endpoints/api/SEO/setupIndexNowEndPoint.js";
-import {setupIndexNowKeyEndpoint} from "./endpoints/api/SEO/setupIndexNowKeyEndpoint.js";
+import {setupIndexNowEndpoint} from "./endpoints/api/seo/setupIndexNowEndPoint.js";
+import {setupIndexNowKeyEndpoint} from "./endpoints/api/seo/setupIndexNowKeyEndpoint.js";
 import {setupGenerateMetadataEndpoint} from "./endpoints/api/setupGenerateMetadataEndpoint.js";
-import {setupYandexIconRoute} from "./endpoints/api/SEO/setupYandexIconRoute.js";
+import {setupYandexIconRoute} from "./endpoints/api/seo/setupYandexIconRoute.js";
 import {setupShortenRoute} from "./endpoints/api/setupShortenRoute.js";
 
 const port: number = parseInt(process.env.PORT || '10000', 10);

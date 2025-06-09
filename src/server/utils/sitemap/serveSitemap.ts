@@ -1,5 +1,5 @@
-import { sitemapUrls } from "./addAnnotationsToSitemap.js";
-import { publicUrl } from "../../config/index.js";
+import {sitemapUrls} from "./addAnnotationsToSitemap.js";
+import {publicUrl} from "../../config/index.js";
 
 export function serveSitemap(): string {
     let sitemapDate: Date | null = null;

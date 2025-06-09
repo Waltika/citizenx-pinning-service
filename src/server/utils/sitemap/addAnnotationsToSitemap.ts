@@ -1,7 +1,7 @@
 import fs from 'fs';
-import { baseDataDir, publicUrl } from '../../config/index.js';
-import { queueIndexNowUrls, submitIndexNowUrls } from './indexnow.js';
-import { SitemapEntry } from '../../types/types.js';
+import {baseDataDir, publicUrl} from '../../config/index.js';
+import {queueIndexNowUrls, submitIndexNowUrls} from './indexnow.js';
+import {SitemapEntry} from '../../types/types.js';
 
 export const sitemapUrls: Set<SitemapEntry> = new Set();
 const sitemapPath = `${baseDataDir}/sitemap.xml`;

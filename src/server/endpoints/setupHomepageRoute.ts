@@ -1,17 +1,18 @@
-import { Express, Request, Response } from "express";
-import { appendUtmParams } from "../utils/appendUtmParams.js";
-import { getProfileWithRetries } from "../data/getProfileWithRetries.js";
-import { publicUrl } from "../config/index.js";
-import { getShardKey } from "../utils/shardUtils.js";
-import { fromUrlSafeBase64 } from "../utils/fromUrlSafeBase64.js";
-import { sitemapUrls } from "../utils/sitemap/addAnnotationsToSitemap.js";
-import { Annotation } from "../types/types.js";
-import { Mutex } from "async-mutex"; // Add this import
+import {Express, Request, Response} from "express";
+import {appendUtmParams} from "../utils/appendUtmParams.js";
+import {getProfileWithRetries} from "../data/getProfileWithRetries.js";
+import {publicUrl} from "../config/index.js";
+import {getShardKey} from "../utils/shardUtils.js";
+import {fromUrlSafeBase64} from "../utils/fromUrlSafeBase64.js";
+import {sitemapUrls} from "../utils/sitemap/addAnnotationsToSitemap.js";
+import {Annotation} from "../types/types.js";
+import {Mutex} from "async-mutex"; // Add this import
 
 // Simplified type for GUN metadata (the "_" key)
 interface GUNMetadata {
     '#'?: string;
     '>'?: Record<string, number>;
+
     [key: string]: any;
 }
 
@@ -63,7 +64,31 @@ function getDomainsFromSitemap(): string[] {
 }
 
 export async function cacheNewAnnotation(annotation: Annotation, gun: any, shard: string) {
-    const release = await cacheMutex.acquire(); // Acquire mutex
+    const release = await cacheMutex.acquire();
+
+    function cacheIfNeeded(annotationId: string, newEntry: {
+        id: string;
+        relativeUrl: string;
+        title: string;
+        anchorText: string;
+        author: string;
+        handle: string;
+        timestamp: number;
+        screenshot: string
+    }) {
+        const recheckIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
+        if (recheckIndex !== -1) return;
+        recentAnnotationsCache.push(newEntry);
+        // Deduplicate and sort in one pass
+        const uniqueCache = Array.from(new Set(recentAnnotationsCache.map(a => a.id)))
+            .map(id => recentAnnotationsCache.find(a => a.id === id)!)
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, MAX_CACHED_ANNOTATIONS);
+        recentAnnotationsCache.length = 0;
+        recentAnnotationsCache.push(...uniqueCache);
+        console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+    }
+
     try {
         const annotationId = annotation.id;
         if (annotation.isDeleted) {
@@ -88,15 +113,12 @@ export async function cacheNewAnnotation(annotation: Annotation, gun: any, shard
             // Defer profile fetching to break the call stack
             setImmediate(async () => {
                 try {
-                    const releaseInner = await cacheMutex.acquire(); // Re-acquire mutex for async operation
+                    const releaseInner = await cacheMutex.acquire();
                     try {
                         profile = await getProfileWithRetries(gun, annotation.author);
-                        profileCache.set(annotation.author, { handle: profile.handle || 'Anonymous' });
+                        profileCache.set(annotation.author, {handle: profile.handle || 'Anonymous'});
 
-                        // Add annotation to cache if still not present
-                        const recheckIndex = recentAnnotationsCache.findIndex(a => a.id === annotationId);
-                        if (recheckIndex !== -1) return;
-
+                        // Prepare new entry
                         const newEntry = {
                             id: annotation.id,
                             relativeUrl: `/${annotation.id}/${base64Url}`,
@@ -107,19 +129,23 @@ export async function cacheNewAnnotation(annotation: Annotation, gun: any, shard
                             timestamp: annotation.timestamp,
                             screenshot: `/image/${annotation.id}/${base64Url}/image.png`
                         };
-                        recentAnnotationsCache.push(newEntry);
-                        recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
-                        recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
-                        console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+
+                        // Update cache atomically
+                        const releaseFinal = await cacheMutex.acquire();
+                        try {
+                            cacheIfNeeded(annotationId, newEntry);
+                        } finally {
+                            releaseFinal();
+                        }
                     } finally {
-                        releaseInner(); // Release inner mutex
+                        releaseInner();
                     }
                 } catch (error) {
                     console.error(`[DEBUG] Error fetching profile for ${annotation.author}:`, error);
                 }
             });
         } else {
-            // Add annotation to cache synchronously if profile is cached
+            // Prepare new entry
             const newEntry = {
                 id: annotation.id,
                 relativeUrl: `/${annotation.id}/${base64Url}`,
@@ -130,13 +156,11 @@ export async function cacheNewAnnotation(annotation: Annotation, gun: any, shard
                 timestamp: annotation.timestamp,
                 screenshot: `/image/${annotation.id}/${base64Url}/image.png`
             };
-            recentAnnotationsCache.push(newEntry);
-            recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
-            recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS);
-            console.log(`[DEBUG] Added annotation ${annotationId} to cache from shard ${shard}, cache size: ${recentAnnotationsCache.length}`);
+
+            cacheIfNeeded(annotationId, newEntry);
         }
     } finally {
-        release(); // Release mutex
+        release();
     }
 }
 
@@ -147,7 +171,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
     const isHighTraffic = highTrafficDomains.includes(domain);
     const shards = [domainShard];
     if (isHighTraffic) {
-        shards.push(...Array.from({ length: 10 }, (_, i) => `${domainShard}_shard_${i}`));
+        shards.push(...Array.from({length: 10}, (_, i) => `${domainShard}_shard_${i}`));
     }
 
     for (const shard of shards) {
@@ -164,7 +188,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                 if (url === '_' || !url || !urlData || typeof urlData !== 'object') return;
 
                 // Determine the correct shard for this URL
-                const { domainShard: computedDomainShard, subShard } = getShardKey(url);
+                const {domainShard: computedDomainShard, subShard} = getShardKey(url);
                 const targetShard = subShard || computedDomainShard;
                 if (targetShard !== shard) return; // Skip if this URL belongs to a different shard
 
@@ -172,7 +196,7 @@ function setupRealtimeUpdatesForDomain(gun: any, domain: string) {
                 Object.entries(urlData as Record<string, Annotation>).forEach(async ([annotationId, annotation]) => {
                     if (annotationId === '_' || !annotation || typeof annotation !== 'object') return;
                     if (annotation.isDeleted || !annotation.id || !annotation.url || !annotation.timestamp) return;
-                    cacheNewAnnotation(annotation, gun, shard);
+                    await cacheNewAnnotation(annotation, gun, shard);
                 });
             });
         });
@@ -211,7 +235,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
                 const isHighTraffic = highTrafficDomains.includes(domain);
                 const shards = [domainShard];
                 if (isHighTraffic) {
-                    shards.push(...Array.from({ length: 10 }, (_, i) => `${domainShard}_shard_${i}`));
+                    shards.push(...Array.from({length: 10}, (_, i) => `${domainShard}_shard_${i}`));
                 }
 
                 for (const shard of shards) {
@@ -279,7 +303,7 @@ export function setupHomepageRoute(app: Express, gun: any) {
                                 }
                                 annotationCount++;
                                 console.log(`[DEBUG] Found annotation in shard: ${shard}, URL: ${url}, ID: ${annotationId}, adding to annotationsMap`);
-                                annotationsMap.set(annotationId, { ...annotation, shard });
+                                annotationsMap.set(annotationId, {...annotation, shard});
 
                                 // Wait a bit longer for more annotations
                                 setTimeout(() => {
@@ -302,36 +326,39 @@ export function setupHomepageRoute(app: Express, gun: any) {
                 .sort((a, b) => b.timestamp - a.timestamp)
                 .slice(0, MAX_CACHED_ANNOTATIONS);
 
-            // Populate cache
-            for (const annotation of sortedAnnotations) {
-                const base64Url = Buffer.from(annotation.url).toString('base64')
-                    .replace(/\+/g, '-')
-                    .replace(/\//g, '_')
-                    .replace(/=/g, '');
-                const profile = await getProfileWithRetries(gun, annotation.author);
-                const handle = profile.handle || 'Anonymous';
+            // Populate cache with mutex
+            const release = await cacheMutex.acquire();
+            try {
+                recentAnnotationsCache.length = 0; // Clear cache
+                for (const annotation of sortedAnnotations) {
+                    const base64Url = Buffer.from(annotation.url).toString('base64')
+                        .replace(/\+/g, '-')
+                        .replace(/\//g, '_')
+                        .replace(/=/g, '');
+                    const profile = await getProfileWithRetries(gun, annotation.author);
+                    const handle = profile.handle || 'Anonymous';
 
-                // Cache profile
-                if (!profileCache.has(annotation.author)) {
-                    profileCache.set(annotation.author, { handle });
+                    if (!profileCache.has(annotation.author)) {
+                        profileCache.set(annotation.author, {handle});
+                    }
+
+                    recentAnnotationsCache.push({
+                        id: annotation.id,
+                        relativeUrl: `/${annotation.id}/${base64Url}`, // Relative path
+                        title: annotation.title || 'Untitled Annotation',
+                        anchorText: annotation.anchorText || 'View Annotation',
+                        author: annotation.author,
+                        handle,
+                        timestamp: annotation.timestamp,
+                        screenshot: `/image/${annotation.id}/${base64Url}/image.png`
+                    });
                 }
-
-                recentAnnotationsCache.push({
-                    id: annotation.id,
-                    relativeUrl: `/${annotation.id}/${base64Url}`, // Relative path
-                    title: annotation.title || 'Untitled Annotation',
-                    anchorText: annotation.anchorText || 'View Annotation',
-                    author: annotation.author,
-                    handle,
-                    timestamp: annotation.timestamp,
-                    screenshot: `/image/${annotation.id}/${base64Url}/image.png`
-                });
+                recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
+                recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS); // Keep only 30
+                console.log(`[DEBUG] Initialized homepage cache with ${recentAnnotationsCache.length} annotations, total annotations found: ${annotationsMap.size}`);
+            } finally {
+                release();
             }
-
-            // Sort cache by timestamp
-            recentAnnotationsCache.sort((a, b) => b.timestamp - a.timestamp);
-            recentAnnotationsCache.splice(MAX_CACHED_ANNOTATIONS); // Keep only 30
-            console.log(`[DEBUG] Initialized homepage cache with ${recentAnnotationsCache.length} annotations, total annotations found: ${annotationsMap.size}`);
         } catch (error) {
             console.error('[DEBUG] Error initializing homepage cache:', error);
         }

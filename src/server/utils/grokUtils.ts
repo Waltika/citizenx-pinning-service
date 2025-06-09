@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { stripHtml } from './stripHtml.js';
+import {stripHtml} from './stripHtml.js';
 
 // Simple hash function for caching
 function simpleHash(str: string): string {
