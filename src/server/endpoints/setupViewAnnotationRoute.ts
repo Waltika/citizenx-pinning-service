@@ -85,7 +85,7 @@ export function setupViewAnnotationRoute(app: Express, gun: any) {
                 : annotation.screenshot ? `${publicUrl}/image/${annotationId}/${base64Url}/image.png` : defaultImage;
 
             const baseCheckExtensionUrl = `${websiteUrl}/check-extension?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
-            const baseViewAnnotationsUrl = `${websiteUrl}/view-annotations?annotationId=${annotationId}&url=${encodeURIComponent(originalUrl)}`;
+            const baseViewAnnotationsUrl = `${publicUrl}/${annotationId}/${base64Url}`;
             const checkExtensionUrl = appendUtmParams(baseCheckExtensionUrl, req.query);
             const viewAnnotationsUrl = appendUtmParams(baseViewAnnotationsUrl, req.query);
 
