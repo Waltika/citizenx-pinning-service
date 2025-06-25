@@ -13,11 +13,10 @@ let grokApiKey: string = process.env.GROK_KEY || '';
 
 export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
     app.post('/api/analyze-fallacies', async (req: Request, res: Response) => {
-        const {text, annotationId, url} = req.body;
+        const {text} = req.body;
 
         // Input validation
         if (!text || typeof text !== 'string') {
-            console.error('Invalid text input for fallacy analysis', {annotationId, url});
             return res.status(400).json({error: 'Text is required and must be a string'});
         }
 
@@ -60,38 +59,6 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
                 return res.status(500).json({error: 'Invalid response from analysis service'});
             }
 
-            // Store analysis in Gun.js if annotationId and url are provided
-            if (annotationId && url) {
-                const sanitizedUrl = purify.sanitize(url);
-                let domain: string;
-                try {
-                    domain = new URL(sanitizedUrl).hostname.replace(/\./g, '_');
-                } catch (error: any) {
-                    console.error('Invalid URL format', {url: sanitizedUrl, error: error.message});
-                    return res.status(400).json({error: 'Invalid URL format'});
-                }
-
-                const fallacyNode = `annotations_${domain}/${sanitizedUrl}/${annotationId}/fallacies`;
-
-                // Store fallacy analysis with timestamp and unique ID
-                const fallacyData = {
-                    id: uuidv4(),
-                    fallacies: analysis.fallacies,
-                    summary: analysis.summary,
-                    confidence: analysis.confidence,
-                    timestamp: new Date().toISOString(),
-                    isDeleted: false,
-                };
-
-                gun.get(fallacyNode).put(fallacyData, (ack: any) => {
-                    if (ack.err) {
-                        console.error('Failed to store fallacy analysis in Gun.js', {error: ack.err, fallacyNode});
-                    } else {
-                        console.info('Stored fallacy analysis in Gun.js', {fallacyNode, annotationId});
-                    }
-                });
-            }
-
             // Return analysis to client
             res.json({
                 fallacies: analysis.fallacies,
@@ -100,9 +67,7 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
             });
         } catch (error: any) {
             console.error('Error analyzing logical fallacies', {
-                error: error.message,
-                annotationId,
-                url,
+                error: error.message
             });
 
             if (error.response) {
