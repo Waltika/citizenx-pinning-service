@@ -23,7 +23,7 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
         try {
             // Sanitize input text
             const sanitizedText = purify.sanitize(text);
-
+            console.log(`Sanitized text ${sanitizedText}`)
             // Call Grok API for logical fallacy analysis
             const response = await axios.post(
                 'https://api.x.ai/v1/grok/analyze',
@@ -53,11 +53,15 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
 
             const analysis = response.data;
 
+            console.log(`Analysis data ${analysis}`)
+
             // Validate analysis response
             if (!analysis.fallacies || !Array.isArray(analysis.fallacies) || !analysis.summary || typeof analysis.confidence !== 'number') {
                 console.error('Invalid Grok API response format', {response: analysis});
                 return res.status(500).json({error: 'Invalid response from analysis service'});
             }
+
+            console.log(`Analysis details fallacies: ${analysis.fallacies}, summary : ${analysis.summary}, confidence: ${analysis.confidence}`)
 
             // Return analysis to client
             res.json({
