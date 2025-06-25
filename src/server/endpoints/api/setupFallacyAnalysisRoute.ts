@@ -2,7 +2,6 @@ import {Express, Request, Response} from 'express';
 import axios from 'axios';
 import DOMPurify from 'dompurify';
 import {JSDOM} from 'jsdom';
-import {v4 as uuidv4} from 'uuid';
 
 // Setup DOMPurify with JSDOM for sanitization
 const window: any = new JSDOM('').window;
@@ -17,30 +16,59 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
 
         // Input validation
         if (!text || typeof text !== 'string') {
+            console.error('Invalid text input for fallacy analysis', {text});
             return res.status(400).json({error: 'Text is required and must be a string'});
         }
 
         try {
-            // Sanitize input text
-            const sanitizedText = purify.sanitize(text);
-            console.log(`Sanitized text ${sanitizedText}`)
+            // Sanitize input text and limit to 1000 characters
+            const sanitizedText = purify.sanitize(text).substring(0, 1000);
+            console.log(`Sanitized text: ${sanitizedText}`);
+
+            // Validate API key
+            if (!grokApiKey) {
+                console.error('Grok API key is not set');
+                return res.status(500).json({error: 'API key not configured'});
+            }
+
             // Call Grok API for logical fallacy analysis
+            console.log('Making Grok API request...');
             const response = await axios.post(
-                'https://api.x.ai/v1/grok/analyze',
+                'https://api.x.ai/v1/chat/completions',
                 {
-                    text: sanitizedText,
-                    task: 'identify_logical_fallacies',
-                    instructions: `
-                        Analyze the provided text for logical fallacies. Return a JSON object with:
-                        - fallacies: An array of objects, each containing:
-                          - type: The type of fallacy (e.g., "Ad Hominem", "Strawman").
-                          - description: A brief explanation of the fallacy.
-                          - excerpt: The specific text segment where the fallacy occurs.
-                          - severity: A score from 1 (minor) to 5 (severe).
-                        - summary: A concise summary of the analysis.
-                        - confidence: A score from 0 to 1 indicating confidence in the analysis.
-                        Provide explanations for each fallacy to educate the user.
-                    `,
+                    model: 'grok-3',
+                    messages: [
+                        {
+                            role: 'user',
+                            content: `Analyze the following text for logical fallacies and return a JSON object with:
+- fallacies: An array of objects, each containing:
+  - type: The type of fallacy (e.g., "Ad Hominem", "Strawman").
+  - description: A brief explanation of the fallacy.
+  - excerpt: The specific text segment where the fallacy occurs.
+  - severity: A score from 1 (minor) to 5 (severe).
+- summary: A concise summary of the analysis.
+- confidence: A score from 0 to 1 indicating confidence in the analysis.
+Provide clear explanations for each fallacy to educate the user.
+
+Text: ${sanitizedText}
+
+Return JSON:
+{
+  "fallacies": [
+    {
+      "type": "Ad Hominem",
+      "description": "Attacking the person instead of their argument.",
+      "excerpt": "The author is just a biased journalist.",
+      "severity": 3
+    }
+  ],
+  "summary": "The text contains an ad hominem fallacy.",
+  "confidence": 0.9
+}`
+                        }
+                    ],
+                    max_tokens: 300,
+                    temperature: 0.7
                 },
                 {
                     headers: {
@@ -51,9 +79,8 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
                 }
             );
 
-            const analysis = response.data;
-
-            console.log(`Analysis data ${analysis}`)
+            const analysis = JSON.parse(response.data.choices[0].message.content);
+            console.log(`Analysis data: ${JSON.stringify(analysis, null, 2)}`);
 
             // Validate analysis response
             if (!analysis.fallacies || !Array.isArray(analysis.fallacies) || !analysis.summary || typeof analysis.confidence !== 'number') {
@@ -61,7 +88,7 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
                 return res.status(500).json({error: 'Invalid response from analysis service'});
             }
 
-            console.log(`Analysis details fallacies: ${analysis.fallacies}, summary : ${analysis.summary}, confidence: ${analysis.confidence}`)
+            console.log(`Analysis details - fallacies: ${JSON.stringify(analysis.fallacies)}, summary: ${analysis.summary}, confidence: ${analysis.confidence}`);
 
             // Return analysis to client
             res.json({
@@ -71,7 +98,19 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
             });
         } catch (error: any) {
             console.error('Error analyzing logical fallacies', {
-                error: error.message
+                message: error.message,
+                code: error.code,
+                response: error.response ? {
+                    status: error.response.status,
+                    data: error.response.data,
+                    headers: error.response.headers,
+                } : null,
+                request: {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    headers: error.config?.headers,
+                    data: error.config?.data,
+                },
             });
 
             if (error.response) {
