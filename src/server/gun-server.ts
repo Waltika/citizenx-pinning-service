@@ -21,6 +21,7 @@ import {setupIndexNowKeyEndpoint} from "./endpoints/api/SEO/setupIndexNowKeyEndp
 import {setupGenerateMetadataEndpoint} from "./endpoints/api/setupGenerateMetadataEndpoint.js";
 import {setupYandexIconRoute} from "./endpoints/api/SEO/setupYandexIconRoute.js";
 import {setupShortenRoute} from "./endpoints/api/setupShortenRoute.js";
+import {setupFallacyAnalysisRoute} from "./endpoints/api/setupFallacyAnalysisRoute.js";
 
 const port: number = parseInt(process.env.PORT || '10000', 10);
 
@@ -82,6 +83,7 @@ setupAnnotationRoute(app, gun);
 setupViewAnnotationRoute(app, gun);
 setupAnnotationDebugApiRoute(app, gun);
 setupHomepageRoute(app, gun);
+setupFallacyAnalysisRoute(app, gun);
 
 app.get('/health', (_req: any, res: Response) => res.status(200).json({status: 'ok'}));
 
