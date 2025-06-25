@@ -1,16 +1,15 @@
 import {Express, Request, Response} from 'express';
-import Gun from 'gun';
 import axios from 'axios';
 import DOMPurify from 'dompurify';
 import {JSDOM} from 'jsdom';
 import {v4 as uuidv4} from 'uuid';
 
 // Setup DOMPurify with JSDOM for sanitization
-const window : any  = new JSDOM('').window;
+const window: any = new JSDOM('').window;
 const purify = DOMPurify(window);
 
 // Load Grok API key from secure storage
-const GROK_API_KEY = process.env.GROK_API_KEY || require('fs').readFileSync('/var/data/grok-api.key', 'utf8').trim();
+let grokApiKey: string = process.env.GROK_KEY || '';
 
 export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
     app.post('/api/analyze-fallacies', async (req: Request, res: Response) => {
@@ -46,7 +45,7 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
                 },
                 {
                     headers: {
-                        Authorization: `Bearer ${GROK_API_KEY}`,
+                        Authorization: `Bearer ${grokApiKey}`,
                         'Content-Type': 'application/json',
                     },
                     timeout: 10000, // 10-second timeout
@@ -67,7 +66,7 @@ export function setupFallacyAnalysisRoute(app: Express, gun: any): void {
                 let domain: string;
                 try {
                     domain = new URL(sanitizedUrl).hostname.replace(/\./g, '_');
-                } catch (error : any) {
+                } catch (error: any) {
                     console.error('Invalid URL format', {url: sanitizedUrl, error: error.message});
                     return res.status(400).json({error: 'Invalid URL format'});
                 }

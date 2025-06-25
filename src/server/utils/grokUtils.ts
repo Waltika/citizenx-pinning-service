@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { stripHtml } from './stripHtml.js';
+import {stripHtml} from './stripHtml.js';
 
 // Simple hash function for caching
 function simpleHash(str: string): string {
@@ -14,7 +14,7 @@ function simpleHash(str: string): string {
 
 let grokApiKey: string = process.env.GROK_KEY || '';
 
-export async function generateMetadata(content: string, url: string): Promise<{title: string, anchorText: string}> {
+export async function generateMetadata(content: string, url: string): Promise<{ title: string, anchorText: string }> {
     const cleanContent = stripHtml(content).substring(0, 1000); // Limit content size
     try {
         const response = await axios.post(
